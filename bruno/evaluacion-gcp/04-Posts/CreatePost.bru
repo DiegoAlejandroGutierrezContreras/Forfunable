@@ -1,0 +1,40 @@
+meta {
+  name: CreatePost
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/posts
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "community_id": "{{communityId}}",
+    "title": "Prueba de Persistencia en Cloud SQL",
+    "content_type": "TEXT",
+    "body_text": "Este post verifica que los datos se almacenan en Cloud SQL PostgreSQL y persisten ante reinicios."
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+  res.body.title: eq Prueba de Persistencia en Cloud SQL
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("postId", res.body.id);
+  }
+}

@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+*.md
+docs/
+bruno/
+tests/
+tmp/
+*.exe
+*.log
+.vscode/
+.idea/

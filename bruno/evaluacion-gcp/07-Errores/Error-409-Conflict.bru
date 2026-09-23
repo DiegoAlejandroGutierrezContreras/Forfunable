@@ -1,0 +1,28 @@
+meta {
+  name: Error-409-Conflict
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "admin_master",
+    "email": "admin@forfunable.com",
+    "password": "Password123!"
+  }
+}
+
+assert {
+  res.status: eq 409
+  res.body.error: isDefined
+}

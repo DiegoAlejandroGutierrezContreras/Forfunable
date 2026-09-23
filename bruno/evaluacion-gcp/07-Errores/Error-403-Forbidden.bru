@@ -1,0 +1,31 @@
+meta {
+  name: Error-403-Forbidden
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/admin/communities/{{communityId}}/moderators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "user_id": "{{otherUserId}}",
+    "mod_role": "MOD"
+  }
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: isDefined
+}

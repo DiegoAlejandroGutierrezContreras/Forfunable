@@ -1,0 +1,16 @@
+meta {
+  name: ListPosts
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/posts
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body: isDefined
+}

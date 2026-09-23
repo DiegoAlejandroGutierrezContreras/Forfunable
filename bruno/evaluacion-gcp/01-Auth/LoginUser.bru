@@ -1,0 +1,35 @@
+meta {
+  name: LoginUser
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "kiba_dev",
+    "password": "Password123!"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.token: isDefined
+  res.body.user.username: eq kiba_dev
+}
+
+script:post-response {
+  if (res.body && res.body.token) {
+    bru.setEnvVar("userToken", res.body.token);
+    bru.setEnvVar("userId", res.body.user.id);
+  }
+}

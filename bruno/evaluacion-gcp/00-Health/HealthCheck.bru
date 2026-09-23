@@ -1,0 +1,17 @@
+meta {
+  name: HealthCheck
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrlRoot}}/health
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq HEALTHY
+  res.body.database: eq CONNECTED
+}

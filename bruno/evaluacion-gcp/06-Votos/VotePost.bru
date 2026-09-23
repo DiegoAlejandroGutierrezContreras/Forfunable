@@ -1,0 +1,30 @@
+meta {
+  name: VotePost
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/votes/posts/{{postId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "vote_value": 1
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.message: isDefined
+}

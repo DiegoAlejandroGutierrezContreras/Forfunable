@@ -1,16 +1,33 @@
-# Binarios
+# Binarios de Go y ejecutables
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 forfunable
+forfunable-api
 
-# Entornos y secretos
+# Entornos y secretos (NUNCA subir a Git)
 .env
 .env.*
+!.env.example
 *.local
+*.pem
+*.key
+*.cert
+service-account*.json
+key.json
 
-# IDE
+# Herramientas GCP locales
+cloud-sql-proxy*
+*.proxy
+
+# IDEs y sistemas operativos
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
+
+# Temporales y logs
+tmp/
+*.log

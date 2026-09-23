@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"forfunable/config"
@@ -15,58 +19,73 @@ import (
 func main() {
 	cfg := config.LoadConfig()
 
-	// Inicializar persistencia (Postgres si hay DATABASE_URL, de lo contrario Memoria precargada para Bruno)
-	var repo repository.Repository
-	if cfg.DatabaseURL != "" {
-		log.Println("[INFO] Conectando a base de datos PostgreSQL en Cloud SQL...")
-		pgRepo, err := repository.NewPostgresRepository(cfg.DatabaseURL)
-		if err != nil {
-			log.Fatalf("[FATAL] Error conectando a PostgreSQL: %v", err)
-		}
-		defer pgRepo.Close()
-		repo = pgRepo
-		log.Println("[OK] Conexión establecida con PostgreSQL exitosamente.")
-	} else {
-		log.Println("[INFO] DATABASE_URL no configurada. Iniciando con almacenamiento en Memoria precargado para Bruno y desarrollo local.")
-		repo = repository.NewMemoryRepository()
-		log.Println("[OK] Repositorio en memoria inicializado con datos semilla.")
+	// --- Inicializar PostgreSQL (OBLIGATORIO) ---
+	// MemoryRepository solo puede usarse en tests unitarios aislados.
+	// En Cloud Run: requiere INSTANCE_CONNECTION_NAME + DB_NAME + DB_USER + DB_PASSWORD (socket Unix).
+	// En TCP Local: requiere DATABASE_URL.
+	dsn, err := cfg.BuildDSN()
+	if err != nil {
+		log.Fatalf("[FATAL] Configuración de base de datos incompleta: %v\n\nConfigure INSTANCE_CONNECTION_NAME + DB_NAME + DB_USER + DB_PASSWORD (Cloud Run) o DATABASE_URL (modo TCP local).", err)
 	}
 
-	// Instanciar Handlers
-	authHandler := handlers.NewAuthHandler(repo, cfg)
-	commHandler := handlers.NewCommunityHandler(repo)
-	postHandler := handlers.NewPostHandler(repo)
-	commentHandler := handlers.NewCommentHandler(repo)
-	voteHandler := handlers.NewVoteHandler(repo)
-	chatHandler := handlers.NewChatHandler(repo)
-	notifHandler := handlers.NewNotificationHandler(repo)
-	extraHandler := handlers.NewExtraHandler(repo)
-	adminHandler := handlers.NewAdminHandler(repo)
+	pgRepo, err := repository.NewPostgresRepository(dsn)
+	if err != nil {
+		log.Fatalf("[FATAL] No se pudo conectar a PostgreSQL: %v", err)
+	}
 
-	// Configurar router Gin
-	if cfg.Environment == "production" {
+	log.Println("[OK] PostgreSQL repository active")
+
+	// --- Configurar Gin ---
+	if cfg.GINMode == "release" || cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	r := gin.Default()
-
-	// Middlewares globales de seguridad
+	r := gin.New()
+	r.Use(gin.Recovery())
 	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.SecurityHeaders())
 	rateLimiter := middleware.NewRateLimiter(300, time.Minute)
 	r.Use(rateLimiter.Middleware())
 
-	// Health check perimetral
+	// --- Health Check (FASE 3) ---
+	// Verifica API + PostgreSQL. Devuelve 503 si la BD no responde.
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":      "HEALTHY",
-			"timestamp":   time.Now().Unix(),
+		dbStatus := "CONNECTED"
+		httpStatus := http.StatusOK
+
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := pgRepo.Ping(ctx); err != nil {
+			dbStatus = "DISCONNECTED"
+			httpStatus = http.StatusServiceUnavailable
+		}
+
+		c.JSON(httpStatus, gin.H{
+			"status": func() string {
+				if dbStatus == "CONNECTED" {
+					return "HEALTHY"
+				}
+				return "DEGRADED"
+			}(),
 			"environment": cfg.Environment,
+			"database":    dbStatus,
 		})
 	})
 
 	// Servir documentación OpenAPI
 	r.StaticFile("/openapi.yaml", "./openapi.yaml")
+
+	// --- Instanciar Handlers ---
+	authHandler := handlers.NewAuthHandler(pgRepo, cfg)
+	commHandler := handlers.NewCommunityHandler(pgRepo)
+	postHandler := handlers.NewPostHandler(pgRepo)
+	commentHandler := handlers.NewCommentHandler(pgRepo)
+	voteHandler := handlers.NewVoteHandler(pgRepo)
+	chatHandler := handlers.NewChatHandler(pgRepo)
+	notifHandler := handlers.NewNotificationHandler(pgRepo)
+	extraHandler := handlers.NewExtraHandler(pgRepo)
+	adminHandler := handlers.NewAdminHandler(pgRepo)
 
 	// ==========================================
 	// 1. ENDPOINTS DE CLIENTE FINAL (/api/v1/)
@@ -84,7 +103,6 @@ func main() {
 
 		users := v1.Group("/users")
 		{
-			// Rutas estáticas de perfil autenticado primero
 			usersAuth := users.Group("")
 			usersAuth.Use(middleware.AuthRequired(cfg.JWTSecret))
 			{
@@ -94,8 +112,6 @@ func main() {
 				usersAuth.POST("/me/verify-age", authHandler.VerifyAge)
 				usersAuth.POST("/block", chatHandler.BlockUser)
 			}
-
-			// Rutas con parámetro comodín unificado :id
 			users.GET("/:id/karma", voteHandler.GetUserKarma)
 			users.GET("/:id", authHandler.GetPublicProfile)
 		}
@@ -194,7 +210,6 @@ func main() {
 		admin.Use(middleware.AuthRequired(cfg.JWTSecret))
 		admin.Use(middleware.RequireRole("COMMUNITY_MOD", "GLOBAL_ADMIN"))
 		{
-			// Módulo 2.1: Moderación y Gestión de Comunidades
 			admin.POST("/communities/:id/moderators", adminHandler.AssignModerator)
 			admin.PUT("/communities/:id/settings", adminHandler.UpdateCommunitySettings)
 			admin.GET("/moderation/reports", adminHandler.ListModerationReports)
@@ -202,13 +217,10 @@ func main() {
 			admin.POST("/moderation/actions/ban", adminHandler.BanUser)
 			admin.POST("/moderation/actions/unban", adminHandler.UnbanUser)
 			admin.DELETE("/moderation/content/:id/remove", adminHandler.AdminRemoveContent)
-
-			// Módulo 2.2: Operaciones y Auditoría
 			admin.GET("/audit/logs", adminHandler.ListAuditLogs)
 			admin.GET("/analytics/metrics", adminHandler.GetAnalyticsMetrics)
 			admin.POST("/recommendations/reindex", adminHandler.ReindexRecommendations)
 
-			// Exclusivos Global Admin
 			adminOnly := admin.Group("")
 			adminOnly.Use(middleware.RequireRole("GLOBAL_ADMIN"))
 			{
@@ -220,8 +232,41 @@ func main() {
 		}
 	}
 
-	log.Printf("[INFO] Servidor Forfunable iniciado en el puerto :%s", cfg.Port)
-	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatalf("[FATAL] Error en el servidor: %v", err)
+	// --- Servidor HTTP con timeouts ---
+	srv := &http.Server{
+		Addr:         "0.0.0.0:" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+
+	// --- Iniciar servidor en goroutine ---
+	go func() {
+		log.Printf("[INFO] Servidor Forfunable escuchando en 0.0.0.0:%s (env: %s)", cfg.Port, cfg.Environment)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[FATAL] Error al iniciar el servidor HTTP: %v", err)
+		}
+	}()
+
+	// --- Graceful Shutdown (SIGTERM / SIGINT) ---
+	// Cloud Run envía SIGTERM cuando va a detener el contenedor.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	<-quit
+
+	log.Println("[INFO] Señal de apagado recibida. Cerrando servidor...")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[WARN] Error durante el apagado ordenado del servidor HTTP: %v", err)
+	}
+
+	if err := pgRepo.Close(); err != nil {
+		log.Printf("[WARN] Error al cerrar el pool de PostgreSQL: %v", err)
+	}
+
+	log.Println("[INFO] Servidor apagado correctamente.")
 }

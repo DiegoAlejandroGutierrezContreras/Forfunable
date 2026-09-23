@@ -1,0 +1,27 @@
+meta {
+  name: RegisterUser
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "eval_user_gcp",
+    "email": "eval_gcp@forfunable.com",
+    "password": "Password123!"
+  }
+}
+
+assert {
+  res.status: in [201, 409]
+}

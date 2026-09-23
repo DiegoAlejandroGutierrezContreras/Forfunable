@@ -1,0 +1,37 @@
+meta {
+  name: CreateCommunity
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/communities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "gcp-cloudrun-eval",
+    "description": "Comunidad de prueba creada para evaluar persistencia en Cloud SQL",
+    "rules_text": "1. Mantener respeto. 2. Pruebas reales."
+  }
+}
+
+assert {
+  res.status: in [201, 409]
+}
+
+script:post-response {
+  if (res.body && res.body.id) {
+    bru.setEnvVar("communityId", res.body.id);
+  }
+}
