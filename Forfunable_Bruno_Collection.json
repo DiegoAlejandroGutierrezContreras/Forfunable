@@ -1,0 +1,690 @@
+{
+  "info": {
+    "_postman_id": "forfunable-collection-2026",
+    "name": "Forfunable API - Bruno Collection",
+    "description": "Colección completa de 56 endpoints para la plataforma de foros comunitarios en Go conforme a las especificaciones de arquitectura en GCP.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "userToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "communityId", "value": "b0000000-0000-0000-0000-000000000001" },
+    { "key": "postId", "value": "c0000000-0000-0000-0000-000000000001" },
+    { "key": "commentId", "value": "d0000000-0000-0000-0000-000000000001" },
+    { "key": "userId", "value": "a0000000-0000-0000-0000-000000000003" },
+    { "key": "otherUserId", "value": "a0000000-0000-0000-0000-000000000004" }
+  ],
+  "item": [
+    {
+      "name": "01 - Autenticación",
+      "item": [
+        {
+          "name": "1.1 Registro de Usuario (POST /auth/register)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"nuevo_dev\",\n  \"email\": \"nuevo_dev@forfunable.com\",\n  \"password\": \"Password123!\",\n  \"recaptcha_token\": \"mock_token_pass\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "1.2 Login Usuario Regular (POST /auth/login)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('userToken', res.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"kiba@forfunable.com\",\n  \"password\": \"Password123!\",\n  \"recaptcha_token\": \"mock_token_pass\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "1.3 Login Administrador Global (POST /auth/login)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.access_token) {",
+                  "  pm.collectionVariables.set('adminToken', res.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@forfunable.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "1.4 Renovar Access Token (POST /auth/refresh)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] }
+          }
+        },
+        {
+          "name": "1.5 Cerrar Sesión (POST /auth/logout)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Perfiles de Usuario",
+      "item": [
+        {
+          "name": "2.1 Obtener Perfil Autenticado (GET /users/me)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users", "me"] }
+          }
+        },
+        {
+          "name": "2.2 Actualizar Avatar o Biografía (PATCH /users/me/profile)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avatar_url\": \"https://avatar.iran.liara.run/public/3\",\n  \"bio\": \"Gopher apasionado construyendo aplicaciones escalables en Cloud Run\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/me/profile", "host": ["{{baseUrl}}"], "path": ["users", "me", "profile"] }
+          }
+        },
+        {
+          "name": "2.3 Actualizar Presencia en Línea (PATCH /users/me/status)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"presence_status\": \"ONLINE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/me/status", "host": ["{{baseUrl}}"], "path": ["users", "me", "status"] }
+          }
+        },
+        {
+          "name": "2.4 Validar Mayoría de Edad mediante IDP (POST /users/me/verify-age)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idp_assertion_token\": \"mock_oauth2_idp_token_2026\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/me/verify-age", "host": ["{{baseUrl}}"], "path": ["users", "me", "verify-age"] }
+          }
+        },
+        {
+          "name": "2.5 Consulta Pública de Perfil (GET /users/:username)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/users/kiba_dev", "host": ["{{baseUrl}}"], "path": ["users", "kiba_dev"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Comunidades y Membresías",
+      "item": [
+        {
+          "name": "3.1 Listar Comunidades (GET /communities)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/communities?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["communities"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] }
+          }
+        },
+        {
+          "name": "3.2 Crear Comunidad (POST /communities)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"tecnologia\",\n  \"description\": \"Todo sobre novedades científicas, tecnológicas y open source.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/communities", "host": ["{{baseUrl}}"], "path": ["communities"] }
+          }
+        },
+        {
+          "name": "3.3 Detalle de Comunidad (GET /communities/:name)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/communities/golang", "host": ["{{baseUrl}}"], "path": ["communities", "golang"] }
+          }
+        },
+        {
+          "name": "3.4 Suscribirse a Comunidad (POST /communities/:id/join)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/communities/{{communityId}}/join", "host": ["{{baseUrl}}"], "path": ["communities", "{{communityId}}", "join"] }
+          }
+        },
+        {
+          "name": "3.5 Salir de Comunidad (DELETE /communities/:id/leave)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/communities/{{communityId}}/leave", "host": ["{{baseUrl}}"], "path": ["communities", "{{communityId}}", "leave"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Publicaciones",
+      "item": [
+        {
+          "name": "4.1 Feed de Publicaciones (GET /posts)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/posts?page=1&limit=20&sort=newest", "host": ["{{baseUrl}}"], "path": ["posts"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }, { "key": "sort", "value": "newest" }] }
+          }
+        },
+        {
+          "name": "4.2 Crear Publicación (POST /posts)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) {",
+                  "  pm.collectionVariables.set('postId', res.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"community_id\": \"{{communityId}}\",\n  \"title\": \"¿Por qué la arquitectura ltree supera a WITH RECURSIVE?\",\n  \"content_type\": \"TEXT\",\n  \"body_text\": \"La extensión ltree de PostgreSQL indexada con GiST permite consultar ramas jerárquicas completas en una sola transacción plana en milisegundos.\",\n  \"media_url\": \"\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/posts", "host": ["{{baseUrl}}"], "path": ["posts"] }
+          }
+        },
+        {
+          "name": "4.3 Detalle de Publicación (GET /posts/:id)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["posts", "{{postId}}"] }
+          }
+        },
+        {
+          "name": "4.4 Editar Publicación Propia (PATCH /posts/:id)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"body_text\": \"Texto actualizado de la publicación técnica con explicaciones adicionales.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["posts", "{{postId}}"] }
+          }
+        },
+        {
+          "name": "4.5 Eliminar Publicación Propia (DELETE /posts/:id)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["posts", "{{postId}}"] }
+          }
+        },
+        {
+          "name": "4.6 Solicitar URL Firmada para Multimedia (POST /posts/media-upload-url)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"arquitectura-gcp.png\",\n  \"mime_type\": \"image/png\",\n  \"file_size\": 1048576\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/posts/media-upload-url", "host": ["{{baseUrl}}"], "path": ["posts", "media-upload-url"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Comentarios Jerárquicos ltree",
+      "item": [
+        {
+          "name": "5.1 Árbol de Comentarios con ltree (GET /posts/:id/comments)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/posts/{{postId}}/comments", "host": ["{{baseUrl}}"], "path": ["posts", "{{postId}}", "comments"] }
+          }
+        },
+        {
+          "name": "5.2 Publicar Comentario o Respuesta (POST /comments)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.id) {",
+                  "  pm.collectionVariables.set('commentId', res.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"post_id\": \"{{postId}}\",\n  \"parent_comment_id\": null,\n  \"content\": \"Comentario raíz estructurado con la ruta ltree del post.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/comments", "host": ["{{baseUrl}}"], "path": ["comments"] }
+          }
+        },
+        {
+          "name": "5.3 Editar Comentario Propio (PATCH /comments/:id)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Comentario editado con aclaraciones.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/comments/{{commentId}}", "host": ["{{baseUrl}}"], "path": ["comments", "{{commentId}}"] }
+          }
+        },
+        {
+          "name": "5.4 Borrar Comentario Preservando Árbol (DELETE /comments/:id)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/comments/{{commentId}}", "host": ["{{baseUrl}}"], "path": ["comments", "{{commentId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Votación y Karma",
+      "item": [
+        {
+          "name": "6.1 Emitir Voto en Publicación (POST /votes/posts/:id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vote_value\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/votes/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["votes", "posts", "{{postId}}"] }
+          }
+        },
+        {
+          "name": "6.2 Emitir Voto en Comentario (POST /votes/comments/:id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vote_value\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/votes/comments/{{commentId}}", "host": ["{{baseUrl}}"], "path": ["votes", "comments", "{{commentId}}"] }
+          }
+        },
+        {
+          "name": "6.3 Consultar Karma y Desglose (GET /users/:id/karma)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/karma", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "karma"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Mensajería Privada y Amistades",
+      "item": [
+        {
+          "name": "7.1 Enviar Solicitud de Chat (POST /chats/requests)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient_user_id\": \"{{otherUserId}}\",\n  \"initial_message\": \"Hola, me gustó tu comentario sobre Cloud SQL.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/chats/requests", "host": ["{{baseUrl}}"], "path": ["chats", "requests"] }
+          }
+        },
+        {
+          "name": "7.2 Listar Conversaciones Activas (GET /chats/conversations)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chats/conversations", "host": ["{{baseUrl}}"], "path": ["chats", "conversations"] }
+          }
+        },
+        {
+          "name": "7.3 Bloquear Usuario (POST /users/block)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_user_id\": \"{{otherUserId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/users/block", "host": ["{{baseUrl}}"], "path": ["users", "block"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Notificaciones",
+      "item": [
+        {
+          "name": "8.1 Lista de Notificaciones (GET /notifications)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/notifications", "host": ["{{baseUrl}}"], "path": ["notifications"] }
+          }
+        },
+        {
+          "name": "8.2 Configuración de Alertas (GET /notifications/settings)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/notifications/settings", "host": ["{{baseUrl}}"], "path": ["notifications", "settings"] }
+          }
+        },
+        {
+          "name": "8.3 Actualizar Configuración (PUT /notifications/settings)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email_on_reply\": true,\n  \"email_on_mention\": true,\n  \"push_on_chat_request\": true,\n  \"push_on_community_update\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/notifications/settings", "host": ["{{baseUrl}}"], "path": ["notifications", "settings"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Participación y Búsqueda",
+      "item": [
+        {
+          "name": "9.1 Enviar Denuncia o Reporte (POST /reports)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_id\": \"{{postId}}\",\n  \"target_type\": \"POST\",\n  \"reason_code\": \"SPAM\",\n  \"description\": \"Publicación con contenido comercial no autorizado\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/reports", "host": ["{{baseUrl}}"], "path": ["reports"] }
+          }
+        },
+        {
+          "name": "9.2 Proponer Nota Comunitaria (POST /community-notes)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"post_id\": \"{{postId}}\",\n  \"note_text\": \"Nota de verificación: La extensión ltree requiere PostgreSQL 9+ y habilita operadores GiST.\",\n  \"proof_url\": \"https://www.postgresql.org/docs/current/ltree.html\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/community-notes", "host": ["{{baseUrl}}"], "path": ["community-notes"] }
+          }
+        },
+        {
+          "name": "9.3 Búsqueda Predictiva Semántica (GET /search/predictive)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/search/predictive?q=go", "host": ["{{baseUrl}}"], "path": ["search", "predictive"], "query": [{ "key": "q", "value": "go" }] }
+          }
+        },
+        {
+          "name": "9.4 Feed Recomendado Hot Ranking Decay (GET /recommendations/feed)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{userToken}}" }],
+            "url": { "raw": "{{baseUrl}}/recommendations/feed?limit=10", "host": ["{{baseUrl}}"], "path": ["recommendations", "feed"], "query": [{ "key": "limit", "value": "10" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 - Administración y Moderación",
+      "item": [
+        {
+          "name": "10.1 Listar Reportes de Moderación (GET /admin/moderation/reports)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/moderation/reports", "host": ["{{baseUrl}}"], "path": ["admin", "moderation", "reports"] }
+          }
+        },
+        {
+          "name": "10.2 Asignar Moderador Local (POST /admin/communities/:id/moderators)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"role\": \"LEAD_MOD\",\n  \"permissions\": { \"can_ban\": true, \"can_remove\": true }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/communities/{{communityId}}/moderators", "host": ["{{baseUrl}}"], "path": ["admin", "communities", "{{communityId}}", "moderators"] }
+          }
+        },
+        {
+          "name": "10.3 Sancionar Usuario (POST /admin/moderation/actions/ban)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{otherUserId}}\",\n  \"community_id\": \"{{communityId}}\",\n  \"reason\": \"Conducta contraria a las reglas del foro\",\n  \"duration_days\": 7\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/moderation/actions/ban", "host": ["{{baseUrl}}"], "path": ["admin", "moderation", "actions", "ban"] }
+          }
+        },
+        {
+          "name": "10.4 Levantar Sanción de Usuario (POST /admin/moderation/actions/unban)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{otherUserId}}\",\n  \"community_id\": \"{{communityId}}\",\n  \"reason\": \"Apelación aceptada\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/moderation/actions/unban", "host": ["{{baseUrl}}"], "path": ["admin", "moderation", "actions", "unban"] }
+          }
+        },
+        {
+          "name": "10.5 Retiro Forzado de Contenido (DELETE /admin/moderation/content/:id/remove)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/moderation/content/{{postId}}/remove", "host": ["{{baseUrl}}"], "path": ["admin", "moderation", "content", "{{postId}}", "remove"] }
+          }
+        },
+        {
+          "name": "10.6 Listado Global de Usuarios (GET /admin/users)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/users?page=1&limit=20", "host": ["{{baseUrl}}"], "path": ["admin", "users"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "20" }] }
+          }
+        },
+        {
+          "name": "10.7 Modificar Rol Global de Usuario (PATCH /admin/users/:id/role)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"global_role\": \"COMMUNITY_MOD\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/users/{{userId}}/role", "host": ["{{baseUrl}}"], "path": ["admin", "users", "{{userId}}", "role"] }
+          }
+        },
+        {
+          "name": "10.8 Suspender Cuenta Globalmente (PATCH /admin/users/:id/status)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false,\n  \"freeze_reason\": \"Actividad sospechosa de botnet detectada por reCAPTCHA\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/users/{{otherUserId}}/status", "host": ["{{baseUrl}}"], "path": ["admin", "users", "{{otherUserId}}", "status"] }
+          }
+        },
+        {
+          "name": "10.9 Registro Inmutable de Auditoría (GET /admin/audit/logs)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/audit/logs", "host": ["{{baseUrl}}"], "path": ["admin", "audit", "logs"] }
+          }
+        },
+        {
+          "name": "10.10 Métricas Consolidadas de Salud (GET /admin/analytics/metrics)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/analytics/metrics?timeframe=24h", "host": ["{{baseUrl}}"], "path": ["admin", "analytics", "metrics"], "query": [{ "key": "timeframe", "value": "24h" }] }
+          }
+        },
+        {
+          "name": "10.11 Grupos de Cuentas Sospechosas (GET /admin/security/account-groups)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/security/account-groups?risk_threshold=0.8", "host": ["{{baseUrl}}"], "path": ["admin", "security", "account-groups"], "query": [{ "key": "risk_threshold", "value": "0.8" }] }
+          }
+        },
+        {
+          "name": "10.12 Re-indexación en Vertex AI (POST /admin/recommendations/reindex)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"community_id\": \"{{communityId}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/recommendations/reindex", "host": ["{{baseUrl}}"], "path": ["admin", "recommendations", "reindex"] }
+          }
+        }
+      ]
+    }
+  ]
+}

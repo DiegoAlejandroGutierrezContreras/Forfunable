@@ -1,0 +1,1007 @@
+openapi: 3.0.3
+info:
+  title: Forfunable Communities API
+  description: |
+    API RESTful de alto rendimiento para plataforma de comunidades interactivas (tipo Reddit) en Google Cloud Platform.
+    Cumple con RFC 9110, control de roles RBAC, jerarquía ltree GiST y algoritmo Hot Ranking Decay.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Servidor de desarrollo local
+
+paths:
+  /auth/register:
+    post:
+      summary: Registro de nuevo usuario
+      tags: [1.1 Autenticación y Perfil]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username: { type: string, example: "kiba_dev" }
+                email: { type: string, format: email, example: "kiba@forfunable.com" }
+                password: { type: string, minLength: 8, example: "Password123!" }
+                recaptcha_token: { type: string, example: "mock_token" }
+      responses:
+        '201':
+          description: Usuario creado exitosamente y tokens emitidos
+        '400':
+          description: Datos inválidos
+        '409':
+          description: Nombre de usuario o correo ya registrado
+        '422':
+          description: Contraseña insegura
+
+  /auth/login:
+    post:
+      summary: Autenticación y emisión de tokens
+      tags: [1.1 Autenticación y Perfil]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, example: "kiba@forfunable.com" }
+                password: { type: string, example: "Password123!" }
+                recaptcha_token: { type: string }
+      responses:
+        '200':
+          description: Login exitoso, devuelve access token y setea cookie HttpOnly
+        '401':
+          description: Credenciales incorrectas
+        '429':
+          description: Límite de intentos alcanzado
+
+  /auth/refresh:
+    post:
+      summary: Renovación de Access Token expirado
+      tags: [1.1 Autenticación y Perfil]
+      responses:
+        '200':
+          description: Tokens renovados
+        '401':
+          description: Refresh token inválido o ausente
+
+  /auth/logout:
+    post:
+      summary: Cierre de sesión y revocación de credenciales
+      tags: [1.1 Autenticación y Perfil]
+      responses:
+        '200':
+          description: Sesión cerrada
+
+  /users/me:
+    get:
+      summary: Obtiene perfil del usuario autenticado
+      tags: [1.1 Autenticación y Perfil]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Datos del perfil del usuario actual
+        '401':
+          description: No autenticado
+
+  /users/me/profile:
+    patch:
+      summary: Actualización de avatar y biografía
+      tags: [1.1 Autenticación y Perfil]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                avatar_url: { type: string }
+                bio: { type: string }
+      responses:
+        '200':
+          description: Perfil actualizado
+
+  /users/me/status:
+    patch:
+      summary: Actualiza presencia en línea
+      tags: [1.1 Autenticación y Perfil]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [presence_status]
+              properties:
+                presence_status: { type: string, enum: [ONLINE, BUSY, OFFLINE] }
+      responses:
+        '200':
+          description: Estado actualizado
+
+  /users/me/verify-age:
+    post:
+      summary: Validación de mayoría de edad mediante IDP
+      tags: [1.1 Autenticación y Perfil]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idp_assertion_token]
+              properties:
+                idp_assertion_token: { type: string }
+      responses:
+        '200':
+          description: Confirmación booleana de verificación
+
+  /users/{username}:
+    get:
+      summary: Consulta pública de perfil y reputación
+      tags: [1.1 Autenticación y Perfil]
+      parameters:
+        - in: path
+          name: username
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Perfil público
+        '404':
+          description: Usuario no encontrado
+
+  /communities:
+    get:
+      summary: Lista y busca comunidades temáticas
+      tags: [1.2 Comunidades]
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Lista paginada de comunidades
+    post:
+      summary: Creación de nueva comunidad (requiere karma >= 100)
+      tags: [1.2 Comunidades]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '201':
+          description: Comunidad creada
+        '403':
+          description: Karma insuficiente (< 100)
+
+  /communities/{name}:
+    get:
+      summary: Detalle, reglas y moderadores de un foro
+      tags: [1.2 Comunidades]
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Detalle de comunidad
+        '404':
+          description: Comunidad no encontrada
+
+  /communities/{id}/join:
+    post:
+      summary: Suscribe al usuario a la comunidad
+      tags: [1.2 Comunidades]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Suscripción exitosa
+        '409':
+          description: Ya es miembro
+
+  /communities/{id}/leave:
+    delete:
+      summary: Cancela suscripción a la comunidad
+      tags: [1.2 Comunidades]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Desuscripción exitosa
+
+  /posts:
+    get:
+      summary: Feed global o filtrado por comunidad
+      tags: [1.3 Publicaciones]
+      parameters:
+        - in: query
+          name: community_id
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema: { type: string, enum: [newest, top] }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Lista de publicaciones
+    post:
+      summary: Crea nueva publicación
+      tags: [1.3 Publicaciones]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [community_id, title, content_type]
+              properties:
+                community_id: { type: string }
+                title: { type: string }
+                content_type: { type: string, enum: [TEXT, IMAGE, VIDEO, LINK] }
+                body_text: { type: string }
+                media_url: { type: string }
+      responses:
+        '201':
+          description: Publicación creada
+
+  /posts/{id}:
+    get:
+      summary: Detalle de publicación
+      tags: [1.3 Publicaciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Datos de la publicación
+        '404':
+          description: No encontrada
+    patch:
+      summary: Edita texto de publicación propia
+      tags: [1.3 Publicaciones]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body_text]
+              properties:
+                body_text: { type: string }
+      responses:
+        '200':
+          description: Publicación editada
+        '403':
+          description: Solo el autor puede editar
+    delete:
+      summary: Elimina publicación propia
+      tags: [1.3 Publicaciones]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Publicación eliminada
+
+  /posts/media-upload-url:
+    post:
+      summary: Solicita URL firmada para Cloud Storage
+      tags: [1.3 Publicaciones]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, mime_type, file_size]
+              properties:
+                filename: { type: string }
+                mime_type: { type: string }
+                file_size: { type: integer }
+      responses:
+        '200':
+          description: Signed URL temporal generada
+        '415':
+          description: Formato multimedia no soportado
+
+  /posts/{id}/comments:
+    get:
+      summary: Recupera árbol completo de comentarios indexado con ltree
+      tags: [1.4 Comentarios]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: sort_by
+          schema: { type: string }
+        - in: query
+          name: max_depth
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Árbol de comentarios jerárquico
+
+  /comments:
+    post:
+      summary: Publica un comentario o respuesta anidada
+      tags: [1.4 Comentarios]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [post_id, content]
+              properties:
+                post_id: { type: string }
+                parent_comment_id: { type: string }
+                content: { type: string }
+      responses:
+        '201':
+          description: Comentario creado con path ltree calculado
+
+  /comments/{id}:
+    patch:
+      summary: Edita comentario propio
+      tags: [1.4 Comentarios]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses:
+        '200':
+          description: Comentario actualizado
+    delete:
+      summary: Elimina comentario propio (preservando árbol de hijos)
+      tags: [1.4 Comentarios]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Comentario sustituido por marca de borrado
+
+  /votes/posts/{id}:
+    post:
+      summary: Emite o modifica voto en post (write-behind)
+      tags: [1.5 Votación y Karma]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vote_value]
+              properties:
+                vote_value: { type: integer, enum: [1, -1, 0] }
+      responses:
+        '200':
+          description: Voto registrado y score actualizado
+
+  /votes/comments/{id}:
+    post:
+      summary: Emite o modifica voto en comentario
+      tags: [1.5 Votación y Karma]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vote_value]
+              properties:
+                vote_value: { type: integer, enum: [1, -1, 0] }
+      responses:
+        '200':
+          description: Voto registrado
+
+  /users/{id}/karma:
+    get:
+      summary: Historial y desglose de karma
+      tags: [1.5 Votación y Karma]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Desglose de karma
+
+  /chats/requests:
+    post:
+      summary: Envía solicitud de chat privado
+      tags: [1.6 Mensajería Privada]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient_user_id, initial_message]
+              properties:
+                recipient_user_id: { type: string }
+                initial_message: { type: string }
+      responses:
+        '201':
+          description: Solicitud enviada
+
+  /chats/requests/{id}:
+    patch:
+      summary: Acepta, rechaza o bloquea solicitud de chat
+      tags: [1.6 Mensajería Privada]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [ACCEPT, REJECT, BLOCK] }
+      responses:
+        '200':
+          description: Estado de solicitud actualizado
+
+  /chats/conversations:
+    get:
+      summary: Lista conversaciones privadas activas
+      tags: [1.6 Mensajería Privada]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Conversaciones del usuario
+
+  /chats/conversations/{id}/messages:
+    get:
+      summary: Historial de mensajes de conversación
+      tags: [1.6 Mensajería Privada]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Mensajes
+    post:
+      summary: Envía mensaje por REST (fallback WS)
+      tags: [1.6 Mensajería Privada]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message_text]
+              properties:
+                message_text: { type: string }
+                attachment_url: { type: string }
+      responses:
+        '201':
+          description: Mensaje enviado
+
+  /users/block:
+    post:
+      summary: Bloquea a un usuario para impedir interacciones
+      tags: [1.6 Mensajería Privada]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_user_id]
+              properties:
+                target_user_id: { type: string }
+      responses:
+        '200':
+          description: Usuario bloqueado
+
+  /notifications:
+    get:
+      summary: Lista de notificaciones
+      tags: [1.7 Notificaciones]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Notificaciones del usuario
+
+  /notifications/{id}/read:
+    patch:
+      summary: Marca notificación como leída
+      tags: [1.7 Notificaciones]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Marcada como leída
+
+  /notifications/settings:
+    get:
+      summary: Consulta configuración de alertas
+      tags: [1.7 Notificaciones]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Ajustes de notificación
+    put:
+      summary: Actualiza preferencias de notificación granular
+      tags: [1.7 Notificaciones]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email_on_reply: { type: boolean }
+                email_on_mention: { type: boolean }
+                push_on_chat_request: { type: boolean }
+                push_on_community_update: { type: boolean }
+      responses:
+        '200':
+          description: Ajustes guardados
+
+  /reports:
+    post:
+      summary: Envía denuncia sobre contenido o usuario
+      tags: [1.8 Participación y Búsqueda]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_id, target_type, reason_code]
+              properties:
+                target_id: { type: string }
+                target_type: { type: string, enum: [POST, COMMENT, USER, CHAT_MESSAGE] }
+                reason_code: { type: string }
+                description: { type: string }
+      responses:
+        '201':
+          description: Denuncia registrada
+
+  /community-notes:
+    post:
+      summary: Propone nota aclaratoria de verificación
+      tags: [1.8 Participación y Búsqueda]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [post_id, note_text]
+              properties:
+                post_id: { type: string }
+                note_text: { type: string }
+                proof_url: { type: string }
+      responses:
+        '201':
+          description: Nota propuesta
+
+  /community-notes/{id}/vote:
+    post:
+      summary: Evalúa utilidad de nota comunitaria
+      tags: [1.8 Participación y Búsqueda]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_helpful]
+              properties:
+                is_helpful: { type: boolean }
+      responses:
+        '200':
+          description: Voto computado
+
+  /search/predictive:
+    get:
+      summary: Auto-completado y búsqueda predictiva
+      tags: [1.8 Participación y Búsqueda]
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Resultados sugeridos
+
+  /recommendations/feed:
+    get:
+      summary: Feed personalizado con algoritmo Hot Ranking Decay
+      tags: [1.8 Participación y Búsqueda]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Feed ordenado por algoritmo temporal
+
+  # -------------------------------------------------------------
+  # MÓDULOS DE ADMINISTRACIÓN Y MODERACIÓN (/admin)
+  # -------------------------------------------------------------
+  /admin/communities/{id}/moderators:
+    post:
+      summary: Asigna o promueve moderador local
+      tags: [2.1 Moderación y Gestión]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, role]
+              properties:
+                user_id: { type: string }
+                role: { type: string, enum: [OWNER, LEAD_MOD, MOD] }
+                permissions: { type: object }
+      responses:
+        '200':
+          description: Moderador asignado
+
+  /admin/communities/{id}/settings:
+    put:
+      summary: Actualiza reglas, visibilidad y políticas del foro
+      tags: [2.1 Moderación y Gestión]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rules_text: { type: string }
+                is_private: { type: boolean }
+                age_restricted: { type: boolean }
+      responses:
+        '200':
+          description: Configuraciones actualizadas
+
+  /admin/moderation/reports:
+    get:
+      summary: Lista cola de denuncias pendientes
+      tags: [2.1 Moderación y Gestión]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Cola de reportes
+
+  /admin/moderation/reports/{id}:
+    patch:
+      summary: Resuelve denuncia y genera entrada inmutable de auditoría
+      tags: [2.1 Moderación y Gestión]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [PENDING, UNDER_REVIEW, ACTIONED, DISMISSED] }
+                moderator_notes: { type: string }
+      responses:
+        '200':
+          description: Reporte resuelto y auditado
+
+  /admin/moderation/actions/ban:
+    post:
+      summary: Sanciona y expulsa a un usuario de comunidad
+      tags: [2.1 Moderación y Gestión]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, community_id, reason]
+              properties:
+                user_id: { type: string }
+                community_id: { type: string }
+                reason: { type: string }
+                duration_days: { type: integer }
+      responses:
+        '200':
+          description: Usuario sancionado
+
+  /admin/moderation/actions/unban:
+    post:
+      summary: Levanta sanción de un usuario
+      tags: [2.1 Moderación y Gestión]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, community_id]
+              properties:
+                user_id: { type: string }
+                community_id: { type: string }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Sanción levantada
+
+  /admin/moderation/content/{id}/remove:
+    delete:
+      summary: Retira forzosamente cualquier publicación o comentario
+      tags: [2.1 Moderación y Gestión]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Contenido retirado por moderación forzada
+
+  /admin/users:
+    get:
+      summary: Listado global y búsqueda avanzada de usuarios
+      tags: [2.2 Administración Global]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista global de usuarios
+
+  /admin/users/{id}/role:
+    patch:
+      summary: Modifica rol global del sistema
+      tags: [2.2 Administración Global]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [global_role]
+              properties:
+                global_role: { type: string, enum: [USER, COMMUNITY_MOD, GLOBAL_ADMIN] }
+      responses:
+        '200':
+          description: Rol global actualizado
+
+  /admin/users/{id}/status:
+    patch:
+      summary: Suspende, bloquea o reactiva una cuenta globalmente
+      tags: [2.2 Administración Global]
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_active]
+              properties:
+                is_active: { type: boolean }
+                freeze_reason: { type: string }
+      responses:
+        '200':
+          description: Estado global modificado
+
+  /admin/audit/logs:
+    get:
+      summary: Consulta registro inmutable de auditoría
+      tags: [2.2 Administración Global]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Registros de auditoría
+
+  /admin/analytics/metrics:
+    get:
+      summary: Métricas consolidadas de salud y uso
+      tags: [2.2 Administración Global]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Métricas
+
+  /admin/security/account-groups:
+    get:
+      summary: Consulta grupos de cuentas sintéticas o sospechosas
+      tags: [2.2 Administración Global]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Grupos detectados por reCAPTCHA Account Defender
+
+  /admin/recommendations/reindex:
+    post:
+      summary: Dispara pipeline asíncrono en Vertex AI Search
+      tags: [2.2 Administración Global]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                community_id: { type: string }
+      responses:
+        '202':
+          description: Solicitud aceptada y encolada asíncronamente
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

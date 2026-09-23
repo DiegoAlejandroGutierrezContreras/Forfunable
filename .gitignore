@@ -1,0 +1,16 @@
+# Binarios
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+forfunable
+
+# Entornos y secretos
+.env
+.env.*
+*.local
+
+# IDE
+.vscode/
+.idea/

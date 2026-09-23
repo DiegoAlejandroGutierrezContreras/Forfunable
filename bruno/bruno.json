@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Forfunable API",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
