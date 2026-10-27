@@ -1,0 +1,32 @@
+meta {
+  name: MediaUploadURL-InvalidMime
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/posts/media-upload-url
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+body:json {
+  {
+    "filename": "malicious.sh",
+    "mime_type": "application/x-sh",
+    "file_size": 2048
+  }
+}
+
+assert {
+  res.status: eq 415
+  res.body.error: eq UNSUPPORTED_MEDIA_TYPE
+}

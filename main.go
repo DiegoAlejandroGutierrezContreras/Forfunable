@@ -13,6 +13,7 @@ import (
 	"forfunable/handlers"
 	"forfunable/middleware"
 	"forfunable/repository"
+	"forfunable/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -76,10 +77,17 @@ func main() {
 	// Servir documentación OpenAPI
 	r.StaticFile("/openapi.yaml", "./openapi.yaml")
 
+	// --- Inicializar Servicio Multimedia de Google Cloud Storage ---
+	storageSigner, err := services.NewGCSMediaSigner(cfg.StorageSigningEmail, cfg.StorageCredentialsJSON, services.NewMockMediaSigner(""))
+	if err != nil {
+		log.Printf("[WARN] Error al inicializar signer de Cloud Storage: %v. Usando mock signer.", err)
+		storageSigner, _ = services.NewGCSMediaSigner("", "", services.NewMockMediaSigner(""))
+	}
+
 	// --- Instanciar Handlers ---
 	authHandler := handlers.NewAuthHandler(pgRepo, cfg)
 	commHandler := handlers.NewCommunityHandler(pgRepo)
-	postHandler := handlers.NewPostHandler(pgRepo)
+	postHandler := handlers.NewPostHandler(pgRepo, storageSigner, cfg.StorageBucket)
 	commentHandler := handlers.NewCommentHandler(pgRepo)
 	voteHandler := handlers.NewVoteHandler(pgRepo)
 	chatHandler := handlers.NewChatHandler(pgRepo)
@@ -231,6 +239,22 @@ func main() {
 			}
 		}
 	}
+
+	// --- Servir Aplicación Frontend (Obsidian Signal UI) ---
+	r.Static("/static", "./frontend")
+	r.NoRoute(func(c *gin.Context) {
+		// Respuestas de API no encontradas retornan JSON RFC 9110
+		if len(c.Request.URL.Path) >= 4 && c.Request.URL.Path[:4] == "/api" {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "NOT_FOUND",
+				"message": "Endpoint no encontrado en la especificación OpenAPI",
+				"path":    c.Request.URL.Path,
+			})
+			return
+		}
+		// Fallback SPA para la navegación cliente
+		c.File("./frontend/index.html")
+	})
 
 	// --- Servidor HTTP con timeouts ---
 	srv := &http.Server{

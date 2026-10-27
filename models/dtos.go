@@ -87,6 +87,7 @@ type MediaUploadURLResponse struct {
 	UploadURL string `json:"upload_url"`
 	FileKey   string `json:"file_key"`
 	ExpiresAt int64  `json:"expires_at"`
+	Method    string `json:"method,omitempty"`
 }
 
 // DTOs de Comentarios

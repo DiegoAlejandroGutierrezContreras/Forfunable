@@ -10,18 +10,18 @@ post {
   auth: bearer
 }
 
-auth:bearer {
-  token: {{userToken}}
-}
-
 headers {
   Content-Type: application/json
 }
 
+auth:bearer {
+  token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYTAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAzIiwidXNlcm5hbWUiOiJraWJhX2RldiIsImdsb2JhbF9yb2xlIjoiVVNFUiIsInRva2VuX3R5cGUiOiJhY2Nlc3MiLCJpc3MiOiJmb3JmdW5hYmxlLWJhY2tlbmQiLCJzdWIiOiJhMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDMiLCJleHAiOjE3OTA1NDg0NzgsIm5iZiI6MTc5MDU0NzU3OCwiaWF0IjoxNzkwNTQ3NTc4fQ.rnNHg99t1wN5XrX8xW9GdehjXVCzQ6rkGYLFqNO8xYc
+}
+
 body:json {
   {
-    "post_id": "{{postId}}",
-    "content": "Comentario raíz insertado con ltree en Cloud SQL"
+    "post_id": "492ebcbe-9448-47ea-ba2a-348211c15de0",
+    "content": "comentario prueba de prueba"
   }
 }
 

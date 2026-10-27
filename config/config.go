@@ -25,6 +25,9 @@ type Config struct {
 	GINMode                string
 	RecaptchaBypass        bool
 	StorageBucket          string
+	StorageSigningEmail    string
+	StorageCredentialsJSON string
+	StorageSignedURLTTL    time.Duration
 }
 
 // LoadConfig carga la configuración desde variables de entorno.
@@ -46,6 +49,12 @@ func LoadConfig() *Config {
 	ginMode := getEnv("GIN_MODE", "debug")
 	bypassRecaptcha, _ := strconv.ParseBool(getEnv("RECAPTCHA_BYPASS", "true"))
 	bucket := getEnv("GCS_BUCKET", "forfunable-media")
+	storageEmail := getEnv("GCS_SIGNING_EMAIL", os.Getenv("SERVICE_ACCOUNT_EMAIL"))
+	storageCreds := os.Getenv("GCS_CREDENTIALS_JSON")
+	ttlMinutes, _ := strconv.Atoi(getEnv("GCS_SIGNED_URL_TTL_MINUTES", "15"))
+	if ttlMinutes <= 0 || ttlMinutes > 1440 {
+		ttlMinutes = 15
+	}
 
 	// En producción el JWT_SECRET es obligatorio.
 	// En desarrollo se permite un valor por defecto (NO usar en producción).
@@ -73,6 +82,9 @@ func LoadConfig() *Config {
 		GINMode:                ginMode,
 		RecaptchaBypass:        bypassRecaptcha,
 		StorageBucket:          bucket,
+		StorageSigningEmail:    storageEmail,
+		StorageCredentialsJSON: storageCreds,
+		StorageSignedURLTTL:    time.Duration(ttlMinutes) * time.Minute,
 	}
 }
 

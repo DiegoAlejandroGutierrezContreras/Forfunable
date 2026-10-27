@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forfunable — Plataforma de Comunidades Técnicas en GCP</title>
+  <meta name="description" content="Plataforma de foros y comunidades de alta concurrencia construida sobre Google Cloud Platform con Cloud Run y Cloud SQL.">
+
+  <!-- Obsidian Signal Design System Tokens & Typography -->
+  <link rel="stylesheet" href="/static/css/design-system.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%2300e676'/></svg>">
+</head>
+<body>
+
+  <!-- Barra de Navegación Superior -->
+  <header class="top-navbar">
+    <div style="display: flex; align-items: center; gap: 24px;">
+      <a href="/" data-link class="brand-badge">
+        <span class="brand-dot"></span>
+        <span>Forfunable</span>
+      </a>
+
+      <!-- Buscador Rápido -->
+      <div style="display: flex; align-items: center; background: var(--surface-0); border: 1px solid var(--border-subtle); border-radius: var(--radius-full); padding: 4px 14px; gap: 8px; width: 280px; cursor: pointer;" onclick="Router.navigate('/search')">
+        <span style="color: var(--text-muted); font-size: 13px;">🔍</span>
+        <span style="color: var(--text-muted); font-size: 13px;">Buscar comunidades o hilos...</span>
+      </div>
+    </div>
+
+    <!-- Acciones de Usuario / Auth -->
+    <div id="navbar-auth-actions">
+      <div class="skeleton" style="width: 140px; height: 32px; border-radius: var(--radius-md);"></div>
+    </div>
+  </header>
+
+  <!-- Contenedor Maestro de 3 Columnas -->
+  <div class="app-container">
+
+    <!-- 1. Columna Izquierda: Menú de Navegación -->
+    <aside class="app-sidebar-left">
+      <div class="card" style="display: flex; flex-direction: column; gap: 4px; padding: var(--space-sm);">
+        <a href="/" data-link class="btn btn-ghost" style="justify-content: flex-start;">
+          🏠 <span>Feed Principal</span>
+        </a>
+        <a href="/search" data-link class="btn btn-ghost" style="justify-content: flex-start;">
+          🔍 <span>Explorar / Buscar</span>
+        </a>
+        <a href="/notifications" data-link class="btn btn-ghost" style="justify-content: flex-start;">
+          🔔 <span>Notificaciones</span>
+        </a>
+        <a href="/chat" data-link class="btn btn-ghost" style="justify-content: flex-start;">
+          💬 <span>Mensajes Privados</span>
+        </a>
+        <a href="/c/create" data-link class="btn btn-ghost" style="justify-content: flex-start;">
+          🏛️ <span>Crear Comunidad</span>
+        </a>
+        <a href="/admin" data-link class="btn btn-ghost" style="justify-content: flex-start;">
+          🛡️ <span>Consola Admin</span>
+        </a>
+      </div>
+
+      <!-- Comunidades Rápidas -->
+      <div class="card" style="margin-top: var(--space-md); padding: var(--space-sm);">
+        <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; padding: 6px 8px; margin-bottom: 2px;">
+          Comunidades
+        </div>
+        <div id="sidebar-communities-list">
+          <div class="skeleton skeleton-text" style="width: 80%;"></div>
+          <div class="skeleton skeleton-text" style="width: 60%;"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 2. Columna Central: Contenedor Dinámico de Vistas -->
+    <main id="main-view-container" style="min-width: 0;">
+      <!-- El contenido de la vista activa se inyecta aquí dinámicamente -->
+    </main>
+
+    <!-- 3. Columna Derecha: Contexto y Salud de la Plataforma -->
+    <aside class="app-sidebar-right">
+      <div class="card" style="margin-bottom: var(--space-md);">
+        <h4 style="margin-bottom: 6px;">Forfunable Cloud</h4>
+        <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">
+          Foros comunitarios hiper-escalables sobre Google Cloud Platform con Cloud Run y Cloud SQL PostgreSQL.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Comentarios</span>
+            <span style="color: var(--primary); font-family: var(--font-mono);">ltree GiST</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Algoritmo Feed</span>
+            <span style="color: var(--secondary); font-family: var(--font-mono);">Hot Decay</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Votación</span>
+            <span style="color: var(--tertiary); font-family: var(--font-mono);">Write-Behind</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Estándar API</span>
+            <span style="color: var(--text-primary); font-family: var(--font-mono);">RFC 9110</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4 style="margin-bottom: 8px;">Directrices Rápidas</h4>
+        <ul style="font-size: 12px; color: var(--text-secondary); padding-left: 16px; line-height: 1.6;">
+          <li>Se requieren 100 puntos de karma para fundar foros.</li>
+          <li>Respeta las normas técnicas en cada hilo.</li>
+          <li>El borrado suave preserva el árbol de discusión.</li>
+        </ul>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- Scripts de la Aplicación -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/views/feed.js"></script>
+  <script src="/static/js/views/postDetail.js"></script>
+  <script src="/static/js/views/community.js"></script>
+  <script src="/static/js/views/createCommunity.js"></script>
+  <script src="/static/js/views/createPost.js"></script>
+  <script src="/static/js/views/auth.js"></script>
+  <script src="/static/js/views/profile.js"></script>
+  <script src="/static/js/views/notifications.js"></script>
+  <script src="/static/js/views/search.js"></script>
+  <script src="/static/js/views/chat.js"></script>
+  <script src="/static/js/views/admin.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

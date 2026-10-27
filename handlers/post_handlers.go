@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,16 +9,30 @@ import (
 	"forfunable/middleware"
 	"forfunable/models"
 	"forfunable/repository"
+	"forfunable/services"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type PostHandler struct {
-	repo repository.Repository
+	repo          repository.Repository
+	storageSigner services.MediaSigner
+	storageBucket string
+	signedURLTTL  time.Duration
 }
 
-func NewPostHandler(repo repository.Repository) *PostHandler {
-	return &PostHandler{repo: repo}
+func NewPostHandler(repo repository.Repository, signer services.MediaSigner, bucket string) *PostHandler {
+	if signer == nil {
+		signer = services.NewMockMediaSigner("")
+	}
+	if bucket == "" {
+		bucket = "forfunable-media"
+	}
+	return &PostHandler{
+		repo:          repo,
+		storageSigner: signer,
+		storageBucket: bucket,
+		signedURLTTL:  15 * time.Minute,
+	}
 }
 
 // ListPosts maneja GET /api/v1/posts (200 OK)
@@ -199,35 +212,36 @@ func (h *PostHandler) DeletePost(c *gin.Context) {
 // MediaUploadURL maneja POST /api/v1/posts/media-upload-url (200 OK)
 // Retorna Signed URL autorizada temporalmente para Cloud Storage
 func (h *PostHandler) MediaUploadURL(c *gin.Context) {
+	userID := c.GetString("user_id")
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Error:   "UNAUTHORIZED",
+			Message: "Autenticación requerida para solicitar URL de subida",
+		})
+		return
+	}
+
 	var req models.MediaUploadURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "BAD_REQUEST",
-			Message: "Metadatos del archivo requeridos",
+			Message: "Metadatos del archivo requeridos: " + err.Error(),
 		})
 		return
 	}
 
-	// Inspección de formato MIME permitido
-	allowedTypes := map[string]bool{
-		"image/jpeg": true,
-		"image/png":  true,
-		"image/webp": true,
-		"image/gif":  true,
-		"video/mp4":  true,
-		"video/webm": true,
-	}
-
-	if !allowedTypes[strings.ToLower(req.MimeType)] {
-		c.JSON(http.StatusUnsupportedMediaType, models.ErrorResponse{
-			Error:   "UNSUPPORTED_MEDIA_TYPE",
-			Message: "Tipo de archivo no permitido. Formatos aceptados: JPG, PNG, WEBP, GIF, MP4",
+	// Validación de tamaño (<= 0 bytes es inválido)
+	if req.FileSize <= 0 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error:   "INVALID_FILE_SIZE",
+			Message: "El tamaño del archivo debe ser mayor a 0 bytes",
 		})
 		return
 	}
 
-	// Límite de 50MB
-	if req.FileSize > 50*1024*1024 {
+	// Límite de 50MB (52,428,800 bytes)
+	const maxFileSize = 50 * 1024 * 1024
+	if req.FileSize > maxFileSize {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "FILE_TOO_LARGE",
 			Message: "El archivo excede el tamaño máximo permitido de 50MB",
@@ -235,12 +249,51 @@ func (h *PostHandler) MediaUploadURL(c *gin.Context) {
 		return
 	}
 
-	fileKey := fmt.Sprintf("uploads/%s-%s", uuid.New().String(), req.Filename)
-	signedURL := fmt.Sprintf("https://storage.googleapis.com/forfunable-media/%s?GoogleAccessId=service-account@forfunable.iam.gserviceaccount.com&Expires=%d&Signature=mock_gcp_signed_url_token", fileKey, time.Now().Add(15*time.Minute).Unix())
+	// Inspección y validación estricta de tipo MIME permitido (IMAGE, VIDEO, AUDIO)
+	normalizedMime := strings.ToLower(strings.TrimSpace(req.MimeType))
+	category, ok := services.AllowedMIMETypes[normalizedMime]
+	if !ok {
+		c.JSON(http.StatusUnsupportedMediaType, models.ErrorResponse{
+			Error:   "UNSUPPORTED_MEDIA_TYPE",
+			Message: "Tipo de archivo no permitido. Solo se aceptan tipos MIME compatibles con IMAGE (jpeg, png, webp, gif), VIDEO (mp4, webm, quicktime) o AUDIO (mpeg, ogg, wav, aac)",
+		})
+		return
+	}
+	_ = category
+
+	// Generar object key no predecible, inmune a path traversal y asociado al usuario autenticado
+	objectKey, err := services.BuildObjectKey(userID, req.Filename)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error:   "BAD_REQUEST",
+			Message: "Error en el nombre del archivo: " + err.Error(),
+		})
+		return
+	}
+
+	ttl := h.signedURLTTL
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+
+	uploadResult, err := h.storageSigner.GenerateUploadURL(c.Request.Context(), services.MediaUploadURLOptions{
+		Bucket:    h.storageBucket,
+		ObjectKey: objectKey,
+		MimeType:  normalizedMime,
+		ExpiresIn: ttl,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: "No se pudo generar la URL firmada de Cloud Storage: " + err.Error(),
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, models.MediaUploadURLResponse{
-		UploadURL: signedURL,
-		FileKey:   fileKey,
-		ExpiresAt: time.Now().Add(15 * time.Minute).Unix(),
+		UploadURL: uploadResult.UploadURL,
+		FileKey:   uploadResult.FileKey,
+		ExpiresAt: uploadResult.ExpiresAt,
+		Method:    uploadResult.Method,
 	})
 }

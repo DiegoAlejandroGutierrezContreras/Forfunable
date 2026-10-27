@@ -1,0 +1,41 @@
+meta {
+  name: MediaUploadURL
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/posts/media-upload-url
+  body: json
+  auth: bearer
+}
+
+headers {
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+body:json {
+  {
+    "filename": "demo_video.mp4",
+    "mime_type": "video/mp4",
+    "file_size": 15728640
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.upload_url: isDefined
+  res.body.file_key: isDefined
+  res.body.expires_at: isDefined
+}
+
+script:post-response {
+  if (res.body && res.body.upload_url) {
+    bru.setEnvVar("mediaUploadUrl", res.body.upload_url);
+    bru.setEnvVar("mediaFileKey", res.body.file_key);
+  }
+}

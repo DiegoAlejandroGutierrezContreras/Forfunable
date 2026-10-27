@@ -338,7 +338,12 @@ paths:
 
   /posts/media-upload-url:
     post:
-      summary: Solicita URL firmada para Cloud Storage
+      summary: Solicita URL firmada temporal para Google Cloud Storage (V4)
+      description: |
+        Genera una URL firmada V4 con método HTTP PUT para subir directamente archivos multimedia a Google Cloud Storage
+        sin pasar el binario a través de Cloud Run.
+        Formatos permitidos: IMAGE (jpeg, png, webp, gif), VIDEO (mp4, webm, quicktime) y AUDIO (mpeg, ogg, wav, aac).
+        El tamaño máximo es de 50MB. La clave del objeto es no predecible y se asocia al usuario autenticado.
       tags: [1.3 Publicaciones]
       security:
         - BearerAuth: []
@@ -350,14 +355,55 @@ paths:
               type: object
               required: [filename, mime_type, file_size]
               properties:
-                filename: { type: string }
-                mime_type: { type: string }
-                file_size: { type: integer }
+                filename:
+                  type: string
+                  example: "demo_screencast.mp4"
+                mime_type:
+                  type: string
+                  example: "video/mp4"
+                  enum:
+                    - image/jpeg
+                    - image/png
+                    - image/webp
+                    - image/gif
+                    - video/mp4
+                    - video/webm
+                    - video/quicktime
+                    - audio/mpeg
+                    - audio/ogg
+                    - audio/wav
+                    - audio/aac
+                file_size:
+                  type: integer
+                  minimum: 1
+                  maximum: 52428800
+                  example: 10485760
       responses:
         '200':
-          description: Signed URL temporal generada
+          description: Signed URL V4 temporal generada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url:
+                    type: string
+                    example: "https://storage.googleapis.com/forfunable-media/uploads/users/uuid/uuid-media.mp4?X-Goog-Algorithm=..."
+                  file_key:
+                    type: string
+                    example: "uploads/users/a0000000-0000-0000-0000-000000000003/3c5b4e72-demo_screencast.mp4"
+                  expires_at:
+                    type: integer
+                    example: 1774735200
+                  method:
+                    type: string
+                    example: "PUT"
+        '400':
+          description: Parámetros inválidos (tamaño <= 0 o > 50MB, o metadatos faltantes)
+        '401':
+          description: Token de acceso no suministrado o inválido
         '415':
-          description: Formato multimedia no soportado
+          description: Formato multimedia no soportado (solo IMAGE, VIDEO, AUDIO permitidos)
 
   /posts/{id}/comments:
     get:

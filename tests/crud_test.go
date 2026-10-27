@@ -26,7 +26,7 @@ func setupTestServer() (*gin.Engine, repository.Repository, *config.Config, stri
 
 	authHandler := handlers.NewAuthHandler(repo, cfg)
 	commHandler := handlers.NewCommunityHandler(repo)
-	postHandler := handlers.NewPostHandler(repo)
+	postHandler := handlers.NewPostHandler(repo, nil, "forfunable-media")
 	commentHandler := handlers.NewCommentHandler(repo)
 	voteHandler := handlers.NewVoteHandler(repo)
 	adminHandler := handlers.NewAdminHandler(repo)

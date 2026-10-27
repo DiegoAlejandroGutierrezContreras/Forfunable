@@ -1,0 +1,27 @@
+meta {
+  name: MediaUploadURL-Unauthorized
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/posts/media-upload-url
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "filename": "photo.jpg",
+    "mime_type": "image/jpeg",
+    "file_size": 10240
+  }
+}
+
+assert {
+  res.status: eq 401
+}

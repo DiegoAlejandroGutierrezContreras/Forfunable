@@ -292,6 +292,24 @@
         },
         {
           "name": "4.6 Solicitar URL Firmada para Multimedia (POST /posts/media-upload-url)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const res = pm.response.json();",
+                  "if (res.upload_url) {",
+                  "    pm.collectionVariables.set('mediaUploadUrl', res.upload_url);",
+                  "    pm.collectionVariables.set('mediaFileKey', res.file_key);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -301,6 +319,61 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"filename\": \"arquitectura-gcp.png\",\n  \"mime_type\": \"image/png\",\n  \"file_size\": 1048576\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/posts/media-upload-url", "host": ["{{baseUrl}}"], "path": ["posts", "media-upload-url"] }
+          }
+        },
+        {
+          "name": "4.7 Solicitar URL Firmada - MIME No Permitido (415)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 415 Unsupported Media Type', function () {",
+                  "    pm.response.to.have.status(415);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{userToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"script_malicioso.sh\",\n  \"mime_type\": \"application/x-sh\",\n  \"file_size\": 2048\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/posts/media-upload-url", "host": ["{{baseUrl}}"], "path": ["posts", "media-upload-url"] }
+          }
+        },
+        {
+          "name": "4.8 Solicitar URL Firmada - No Autenticado (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 401 Unauthorized', function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filename\": \"foto.jpg\",\n  \"mime_type\": \"image/jpeg\",\n  \"file_size\": 10240\n}"
             },
             "url": { "raw": "{{baseUrl}}/posts/media-upload-url", "host": ["{{baseUrl}}"], "path": ["posts", "media-upload-url"] }
           }

@@ -89,3 +89,33 @@ Este documento registra los cuellos de botella, riesgos de concurrencia, segurid
 
 - **Solución Aplicada**:  
   Se implementó en `main.go` la llamada activa `pgRepo.Ping(ctx)` con un timeout estricto de 2 segundos. Si PostgreSQL responde, devuelve HTTP 200 con `{"status": "HEALTHY", "database": "CONNECTED"}`. Si la conexión falla, responde HTTP 503 Service Unavailable con `{"status": "DEGRADED", "database": "DISCONNECTED"}`.
+
+---
+
+### [2026-09-27 22:50:00 UTC] - Simulación de URLs Firmadas en Subida Multimedia e Inseguridad por Path Traversal
+
+- **Descripción del Problema**:  
+  En la implementación original de `handlers/post_handlers.go`, el endpoint `POST /api/v1/posts/media-upload-url` generaba URLs simuladas estáticas con firma mock (`Signature=mock_gcp_signed_url_token`). El nombre de archivo se interpolaba directamente sin sanitización (`uploads/%s-%s`, req.Filename), exponiendo el sistema a ataques de path traversal (`../../`), y restringía únicamente formatos de imagen y MP4 dejando fuera video webm/mov y audio según los requerimientos de la plataforma.
+
+- **Causa Raíz**:  
+  Ausencia de una capa de servicio e integración con Google Cloud Storage SDK (`cloud.google.com/go/storage`) y falta de sanitización de claves de objeto mediante `filepath.Base`.
+
+- **Solución Aplicada**:  
+  1. Se creó el servicio `services/media_storage.go` con la interfaz `MediaSigner`, implementación `GCSMediaSigner` para firmado V4 compatible con cuentas de servicio de GCP y `MockMediaSigner` para entornos aislados.
+  2. Se implementó la función `BuildObjectKey` que sanitiza el nombre de archivo mediante `filepath.Base`, genera prefijos estructurados y no predecibles asociados al usuario (`uploads/users/{userID}/{uuid}-{cleanName}{ext}`).
+  3. Se amplió la validación de tipos MIME soportados a todas las categorías requeridas (IMAGE, VIDEO, AUDIO) devolviendo 415 ante formatos no autorizados y 400 ante tamaños <= 0 o > 50MB.
+
+- **Archivos Afectados**:  
+  - `services/media_storage.go`
+  - `config/config.go`
+  - `models/dtos.go`
+  - `handlers/post_handlers.go`
+  - `main.go`
+  - `openapi.yaml`
+  - `tests/media_storage_test.go`
+  - `bruno/evaluacion-gcp/04-Posts/MediaUploadURL.bru`
+  - `Forfunable_Bruno_Collection.json`
+
+- **Prueba que Evita la Regresión**:  
+  `tests/media_storage_test.go` (`TestMediaUploadURL_MIMETypes`, `TestMediaUploadURL_UnsupportedMIME`, `TestMediaUploadURL_FileSizeValidation`, `TestMediaUploadURL_Security`, `TestMediaUpload_IntegrationFlow`, `TestGCSMediaSigner_RealRSA`).
+
