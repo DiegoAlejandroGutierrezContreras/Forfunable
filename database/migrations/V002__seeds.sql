@@ -169,10 +169,10 @@ DECLARE
     post_count INT;
     comment_count INT;
 BEGIN
-    SELECT count(*) INTO user_count FROM users WHERE id LIKE 'a0000000%';
-    SELECT count(*) INTO comm_count FROM communities WHERE id LIKE 'b0000000%';
-    SELECT count(*) INTO post_count FROM posts WHERE id LIKE 'c0000000%';
-    SELECT count(*) INTO comment_count FROM comments WHERE id LIKE 'd0000000%';
+    SELECT count(*) INTO user_count FROM users WHERE id::text LIKE 'a0000000%';
+    SELECT count(*) INTO comm_count FROM communities WHERE id::text LIKE 'b0000000%';
+    SELECT count(*) INTO post_count FROM posts WHERE id::text LIKE 'c0000000%';
+    SELECT count(*) INTO comment_count FROM comments WHERE id::text LIKE 'd0000000%';
 
     RAISE NOTICE 'Seeds aplicados: % usuarios, % comunidades, % posts, % comentarios',
         user_count, comm_count, post_count, comment_count;

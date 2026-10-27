@@ -115,10 +115,11 @@ CREATE TABLE IF NOT EXISTS posts (
 
 CREATE INDEX IF NOT EXISTS idx_posts_community_created ON posts(community_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id);
-CREATE INDEX IF NOT EXISTS idx_posts_hot_score ON posts((
-    (upvotes_count - downvotes_count)::float /
-    POWER(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600.0 + 2.0, 1.8)
-) DESC NULLS LAST) WHERE is_removed = FALSE;
+-- El Hot Ranking se calcula dinámicamente en la consulta.
+-- NOW() no puede utilizarse en índices porque no es una función IMMUTABLE.
+CREATE INDEX IF NOT EXISTS idx_posts_active_created
+ON posts(created_at DESC)
+WHERE is_removed = FALSE;
 
 -- 8. Comentarios Jerárquicos con ltree
 -- path usa la extensión ltree con índice GiST para recuperar
