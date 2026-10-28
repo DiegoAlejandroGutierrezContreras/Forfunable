@@ -12,14 +12,14 @@ window.FeedView = {
       <div class="feed-header" style="margin-bottom: var(--space-md); display: flex; justify-content: space-between; align-items: center;">
         <div>
           <h2>${communityName ? `c/${communityName}` : 'Feed Principal'}</h2>
-          <p style="color: var(--text-secondary); font-size: 13px;">
-            ${communityName ? 'Publicaciones de la comunidad' : 'Ordenado por el Algoritmo de Atenuación Temporal (Hot Ranking)'}
+          <p id="feed-subtitle" style="color: var(--text-secondary); font-size: 13px;">
+            ${this.subtitleFor(communityName)}
           </p>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn btn-secondary ${this.activeFilter === 'hot' ? 'btn-primary' : ''}" onclick="FeedView.setFilter('hot')">🔥 Hot</button>
-          <button class="btn btn-secondary ${this.activeFilter === 'new' ? 'btn-primary' : ''}" onclick="FeedView.setFilter('new')">✨ Nuevos</button>
-          <button class="btn btn-secondary ${this.activeFilter === 'top' ? 'btn-primary' : ''}" onclick="FeedView.setFilter('top')">🏆 Top</button>
+          <button class="btn ${this.activeFilter === 'hot' ? 'btn-primary' : 'btn-secondary'}" data-feed-filter="hot" onclick="FeedView.setFilter('hot')">🔥 Hot</button>
+          <button class="btn ${this.activeFilter === 'new' ? 'btn-primary' : 'btn-secondary'}" data-feed-filter="new" onclick="FeedView.setFilter('new')">✨ Nuevos</button>
+          <button class="btn ${this.activeFilter === 'top' ? 'btn-primary' : 'btn-secondary'}" data-feed-filter="top" onclick="FeedView.setFilter('top')">🏆 Top</button>
         </div>
       </div>
 
@@ -41,10 +41,29 @@ window.FeedView = {
     await this.loadPosts(communityName);
   },
 
+  subtitleFor(communityName) {
+    const order = {
+      hot: 'Hot: votos atenuados por antigüedad (Hot Ranking)',
+      new: 'Nuevos: lo más reciente primero',
+      top: 'Top: las publicaciones más votadas'
+    }[this.activeFilter];
+    return communityName ? `Publicaciones de la comunidad · ${order}` : `Ordenado por ${order}`;
+  },
+
   async setFilter(filter) {
     this.activeFilter = filter;
+    document.querySelectorAll('[data-feed-filter]').forEach(btn => {
+      btn.className = `btn ${btn.dataset.feedFilter === filter ? 'btn-primary' : 'btn-secondary'}`;
+    });
+    const subtitle = document.getElementById('feed-subtitle');
+    if (subtitle) subtitle.textContent = this.subtitleFor(this.communityName);
     // Mantener la comunidad actual; sin esto el filtro cargaba el feed global
     await this.loadPosts(this.communityName);
+  },
+
+  // Filtro de la vista → parámetro sort de GET /posts
+  sortParam() {
+    return { hot: 'hot', new: 'newest', top: 'top' }[this.activeFilter] || 'newest';
   },
 
   async loadPosts(communityName = null) {
@@ -57,9 +76,10 @@ window.FeedView = {
         // El backend filtra por community_id, no por nombre
         const current = window.CommunityView?.currentCommunity;
         const comm = current?.name === communityName ? current : await window.api.getCommunity(communityName);
-        posts = await window.api.listPosts({ community_id: comm.id });
+        posts = await window.api.listPosts({ community_id: comm.id, sort: this.sortParam() });
       } else {
-        posts = await window.api.getFeed(this.activeFilter);
+        // GET /posts es público; /recommendations/feed exige sesión y fallaba para visitantes
+        posts = await window.api.listPosts({ sort: this.sortParam() });
       }
 
       // 3. EMPTY STATE

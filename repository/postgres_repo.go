@@ -470,13 +470,22 @@ func (p *PostgresRepository) ListPosts(communityID, sort string, page, limit int
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	offset := (page - 1) * limit
+	// sort: "newest" (por defecto), "top" (más votados) o "hot" (votos atenuados por antigüedad)
+	orderBy := "p.created_at DESC"
+	switch sort {
+	case "top":
+		orderBy = "(p.upvotes_count - p.downvotes_count) DESC, p.created_at DESC"
+	case "hot":
+		orderBy = `(p.upvotes_count - p.downvotes_count)::float /
+		  POWER(EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600.0 + 2.0, 1.8) DESC, p.created_at DESC`
+	}
 	query := `SELECT p.id, p.community_id, p.author_id, u.username, cm.name,
 		p.title, p.content_type, COALESCE(p.body_text,''), COALESCE(p.media_url,''),
 		p.upvotes_count, p.downvotes_count, p.comments_count, p.is_removed, p.created_at
 		FROM posts p JOIN users u ON p.author_id = u.id
 		JOIN communities cm ON p.community_id = cm.id
 		WHERE p.is_removed = FALSE AND ($1 = '' OR p.community_id::text = $1)
-		ORDER BY p.created_at DESC LIMIT $2 OFFSET $3`
+		ORDER BY ` + orderBy + ` LIMIT $2 OFFSET $3`
 	rows, err := p.db.QueryContext(ctx, query, communityID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error al listar publicaciones: %w", err)

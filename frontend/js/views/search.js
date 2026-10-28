@@ -30,7 +30,7 @@ window.SearchView = {
     container.innerHTML = skeleton + skeleton;
 
     const [hot, recent, comms] = await Promise.allSettled([
-      window.api.getFeed('hot', 6),
+      window.api.listPosts({ sort: 'hot', limit: 6 }),
       window.api.listPosts({ sort: 'newest', limit: 6 }),
       window.api.listCommunities()
     ]);
