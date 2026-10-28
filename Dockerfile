@@ -49,7 +49,7 @@ USER appuser
 # Variables de entorno por defecto (Cloud Run inyecta PORT automáticamente)
 ENV PORT=8080 \
     GIN_MODE=release \
-    ENVIRONMENT=production
+    APP_ENV=production
 
 # Exponer el puerto de Cloud Run
 EXPOSE 8080

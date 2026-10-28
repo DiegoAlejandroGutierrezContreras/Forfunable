@@ -31,3 +31,5 @@ Thumbs.db
 # Temporales y logs
 tmp/
 *.log
+# Configuración MCP local con API keys (Stitch)
+.agents/mcp_config.json
