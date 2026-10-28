@@ -126,11 +126,20 @@ window.AdminView = {
           return;
         }
 
+        const typeLabel = { POST: 'Publicación', COMMENT: 'Comentario', USER: 'Usuario', CHAT_MESSAGE: 'Mensaje' };
         contentEl.innerHTML = reports.map(r => `
-          <div class="card" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-              <div style="font-weight: 600; color: var(--error);">Motivo: ${window.utils.escapeHTML(r.reason)}</div>
-              <div style="font-size: 12px; color: var(--text-secondary);">Denunciado por u/${r.reporter_username || 'usuario'}</div>
+          <div class="card" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+            <div style="min-width: 0;">
+              <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 4px;">
+                <span class="chip chip-mod">${typeLabel[r.target_type] || r.target_type}</span>
+                <span style="font-weight: 600; color: var(--error);">${window.utils.escapeHTML(r.reason_code || '')}</span>
+              </div>
+              ${r.target_preview ? `<div style="font-size: 13px; color: var(--text-primary); margin-bottom: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">«${window.utils.escapeHTML(r.target_preview)}»</div>` : ''}
+              ${r.description ? `<div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">${window.utils.escapeHTML(r.description)}</div>` : ''}
+              <div style="font-size: 12px; color: var(--text-muted);">
+                Denunciado por u/${window.utils.escapeHTML(r.reporter_username || 'usuario')} • ${window.utils.formatTime(r.created_at)}
+                ${r.target_post_id ? ` • <a href="/posts/${r.target_post_id}" data-link style="color: var(--secondary);">Ver contenido</a>` : ''}
+              </div>
             </div>
             <div style="display: flex; gap: 8px;">
               <button class="btn btn-secondary" style="font-size: 11px;" onclick="AdminView.resolveReport('${r.id}', 'DISMISS')">Descartar</button>

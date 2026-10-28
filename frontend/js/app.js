@@ -20,6 +20,9 @@ window.Router = {
     window.api.refreshToken().finally(() => {
       this.handleRoute();
     });
+
+    // Contador de notificaciones sin leer en la barra lateral
+    setInterval(() => this.refreshNotifBadge(), 30000);
   },
 
   navigate(path) {
@@ -78,6 +81,21 @@ window.Router = {
 
     // Cargar listas del sidebar
     this.loadSidebarCommunities();
+    this.refreshNotifBadge();
+  },
+
+  async refreshNotifBadge() {
+    const badge = document.getElementById('nav-notif-badge');
+    if (!badge) return;
+    if (!window.api.user) {
+      badge.style.display = 'none';
+      return;
+    }
+    try {
+      const unread = (await window.api.listNotifications()).filter(n => !n.is_read).length;
+      badge.textContent = unread > 99 ? '99+' : unread;
+      badge.style.display = unread > 0 ? 'inline-flex' : 'none';
+    } catch (_) {}
   },
 
   updateNavbar() {

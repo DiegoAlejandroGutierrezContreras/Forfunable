@@ -88,6 +88,9 @@ window.PostDetailView = {
                 <button class="btn btn-danger" style="padding: 4px 10px; font-size: 12px;" onclick="PostDetailView.deletePost('${this.currentPost.id}')">Eliminar</button>
               ` : ''}
               <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="FeedView.sharePost('${this.currentPost.id}')">Compartir</button>
+              ${window.api.user && window.api.user.id !== this.currentPost.author_id ? `
+                <button class="btn btn-ghost" style="padding: 4px 10px; font-size: 12px;" onclick="PostDetailView.report('${this.currentPost.id}', 'POST')">🚩 Reportar</button>
+              ` : ''}
             </div>
           </div>
         </div>
@@ -171,6 +174,10 @@ window.PostDetailView = {
                 <button class="btn btn-ghost" style="padding: 2px 6px; font-size: 12px; color: var(--error);" onclick="PostDetailView.deleteComment('${c.id}')">
                   Eliminar
                 </button>
+              ` : window.api.user ? `
+                <button class="btn btn-ghost" style="padding: 2px 6px; font-size: 12px;" onclick="PostDetailView.report('${c.id}', 'COMMENT')">
+                  🚩 Reportar
+                </button>
               ` : ''}
             </div>
 
@@ -252,6 +259,25 @@ window.PostDetailView = {
       scoreEl.textContent = currentScore + voteType;
     }
     await window.api.voteComment(commentId, voteType);
+  },
+
+  // Denuncia: llega a la Cola de Moderación de la Consola Admin
+  async report(targetId, targetType) {
+    const reasons = { '1': 'SPAM', '2': 'ACOSO', '3': 'CONTENIDO_OFENSIVO', '4': 'DESINFORMACION', '5': 'OTRO' };
+    const choice = prompt('¿Por qué lo denuncias?\n1. Spam\n2. Acoso\n3. Contenido ofensivo\n4. Desinformación\n5. Otro\n\nEscribe el número:');
+    if (!choice) return;
+    const reason = reasons[choice.trim()];
+    if (!reason) {
+      window.utils.showToast('Opción no válida', 'error');
+      return;
+    }
+    const description = prompt('Detalle opcional para los moderadores:') || '';
+    try {
+      await window.api.createReport(targetId, targetType, reason, description.trim());
+      window.utils.showToast('Denuncia enviada. Los moderadores la revisarán', 'info');
+    } catch (err) {
+      window.utils.showToast(err.message || 'No se pudo enviar la denuncia', 'error');
+    }
   },
 
   async deletePost(postId) {

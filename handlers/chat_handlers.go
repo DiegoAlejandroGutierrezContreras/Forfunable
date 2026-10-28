@@ -88,6 +88,9 @@ func (h *ChatHandler) CreateChatRequest(c *gin.Context) {
 		return
 	}
 
+	notify(h.repo, chatReq.RecipientID, senderID, "Solicitud de chat",
+		"u/"+c.GetString("username")+" quiere chatear contigo: «"+chatReq.InitialMessage+"»", notifChat)
+
 	c.JSON(http.StatusCreated, chatReq)
 }
 
@@ -182,6 +185,8 @@ func (h *ChatHandler) UpdateChatRequest(c *gin.Context) {
 			})
 			return
 		}
+		notify(h.repo, chatReq.SenderID, userID, "Solicitud aceptada",
+			"u/"+c.GetString("username")+" aceptó tu solicitud de chat", notifChat)
 		if chatReq.InitialMessage != "" {
 			_ = h.repo.CreateChatMessage(&models.ChatMessage{
 				ConversationID: conv.ID,
@@ -310,6 +315,13 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 		})
 		return
 	}
+
+	recipientID := conv.User1ID
+	if recipientID == userID {
+		recipientID = conv.User2ID
+	}
+	notify(h.repo, recipientID, userID, "Nuevo mensaje",
+		"u/"+c.GetString("username")+" te envió un mensaje privado", notifChat)
 
 	c.JSON(http.StatusCreated, msg)
 }

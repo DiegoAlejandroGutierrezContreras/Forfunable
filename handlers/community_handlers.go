@@ -188,6 +188,11 @@ func (h *CommunityHandler) JoinCommunity(c *gin.Context) {
 		return
 	}
 
+	if comm, err := h.repo.GetCommunityByID(commID); err == nil {
+		notify(h.repo, comm.CreatorID, userID, "Nuevo miembro",
+			"u/"+c.GetString("username")+" se unió a c/"+comm.Name, notifCommunity(comm.Name))
+	}
+
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,
 		Message: "Suscrito a la comunidad exitosamente",

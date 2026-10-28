@@ -192,17 +192,22 @@ type Report struct {
 	ResolvedBy      *string   `json:"resolved_by"`
 	ResolutionNotes string    `json:"resolution_notes,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
+	// Datos de contexto para la cola de moderación (no se persisten)
+	ReporterUsername string `json:"reporter_username,omitempty"`
+	TargetPostID     string `json:"target_post_id,omitempty"` // post del contenido denunciado (el propio post o el del comentario)
+	TargetPreview    string `json:"target_preview,omitempty"`
 }
 
 // ModerationLog representa una entrada inmutable de auditoría
 type ModerationLog struct {
-	ID          string    `json:"id"`
-	ModeratorID string    `json:"moderator_id"`
-	CommunityID *string   `json:"community_id"`
-	ActionType  string    `json:"action_type"`
-	TargetID    string    `json:"target_id"`
-	Reason      string    `json:"reason"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                string    `json:"id"`
+	ModeratorID       string    `json:"moderator_id"`
+	ModeratorUsername string    `json:"moderator_username,omitempty"`
+	CommunityID       *string   `json:"community_id"`
+	ActionType        string    `json:"action_type"`
+	TargetID          string    `json:"target_id"`
+	Reason            string    `json:"reason"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // NotificationSettings preferencias de avisos y alertas

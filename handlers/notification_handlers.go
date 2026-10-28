@@ -57,6 +57,22 @@ func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
 	})
 }
 
+// MarkAllAsRead maneja PATCH /api/v1/notifications/read-all (200 OK)
+func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
+	if err := h.repo.MarkAllNotificationsRead(c.GetString("user_id")); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: "No se pudieron marcar las notificaciones",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "Todas las notificaciones marcadas como leídas",
+	})
+}
+
 // GetSettings maneja GET /api/v1/notifications/settings (200 OK)
 func (h *NotificationHandler) GetSettings(c *gin.Context) {
 	userID := c.GetString("user_id")

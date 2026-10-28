@@ -206,6 +206,7 @@ func main() {
 		notifications.Use(middleware.AuthRequired(cfg.JWTSecret))
 		{
 			notifications.GET("", notifHandler.ListNotifications)
+			notifications.PATCH("/read-all", notifHandler.MarkAllAsRead)
 			notifications.PATCH("/:id/read", notifHandler.MarkAsRead)
 			notifications.GET("/settings", notifHandler.GetSettings)
 			notifications.PUT("/settings", notifHandler.UpdateSettings)

@@ -281,7 +281,8 @@ class ApiClient {
   // ==========================================
 
   async getPostComments(postId) {
-    return this.listFrom(await this.request(`/posts/${postId}/comments`), 'comments').map(c => this.withNetVotes(c));
+    return this.listFrom(await this.request(`/posts/${postId}/comments`), 'comments')
+      .map(c => ({ ...this.withNetVotes(c), author_id: c.author_id || c.user_id }));
   }
 
   async createComment(commentData) {
@@ -333,6 +334,18 @@ class ApiClient {
   async markNotificationRead(notifId) {
     return await this.request(`/notifications/${notifId}/read`, {
       method: 'PATCH'
+    });
+  }
+
+  async markAllNotificationsRead() {
+    return await this.request('/notifications/read-all', { method: 'PATCH' });
+  }
+
+  // targetType: POST | COMMENT | USER | CHAT_MESSAGE
+  async createReport(targetId, targetType, reasonCode, description = '') {
+    return await this.request('/reports', {
+      method: 'POST',
+      body: JSON.stringify({ target_id: targetId, target_type: targetType, reason_code: reasonCode, description })
     });
   }
 
@@ -399,11 +412,14 @@ class ApiClient {
   }
 
   async adminGetAuditLogs(limit = 50) {
-    return this.listFrom(await this.request(`/admin/audit/logs?limit=${limit}`));
+    // Campos del backend (moderator_username, action_type, reason) → los que usa la tabla
+    return this.listFrom(await this.request(`/admin/audit/logs?limit=${limit}`))
+      .map(l => ({ ...l, actor_username: l.moderator_username, action: l.action_type, details: l.reason }));
   }
 
   async adminListReports() {
-    return this.listFrom(await this.request('/admin/moderation/reports'));
+    // La cola muestra solo lo pendiente; lo resuelto queda en los logs de auditoría
+    return this.listFrom(await this.request('/admin/moderation/reports?status=PENDING'));
   }
 
   async adminResolveReport(reportId, resolution) {

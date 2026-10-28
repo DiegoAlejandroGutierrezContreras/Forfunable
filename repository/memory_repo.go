@@ -1205,6 +1205,17 @@ func (m *MemoryRepository) MarkNotificationRead(id, userID string) error {
 	return nil
 }
 
+func (m *MemoryRepository) MarkAllNotificationsRead(userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, n := range m.notifications {
+		if n.UserID == userID {
+			n.IsRead = true
+		}
+	}
+	return nil
+}
+
 func (m *MemoryRepository) GetNotificationSettings(userID string) (*models.NotificationSettings, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -1267,6 +1278,17 @@ func (m *MemoryRepository) ListReports(communityID, status string, page, limit i
 		result = append(result, r)
 	}
 	return result, nil
+}
+
+func (m *MemoryRepository) GetReportByID(id string) (*models.Report, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	r, ok := m.reports[id]
+	if !ok {
+		return nil, errors.New("denuncia no encontrada")
+	}
+	cp := *r
+	return &cp, nil
 }
 
 func (m *MemoryRepository) ResolveReport(id, status, notes, resolvedBy string) error {

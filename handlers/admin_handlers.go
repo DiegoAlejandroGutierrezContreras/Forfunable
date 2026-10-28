@@ -170,6 +170,15 @@ func (h *AdminHandler) ResolveReport(c *gin.Context) {
 		return
 	}
 
+	report, err := h.repo.GetReportByID(reportID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.ErrorResponse{
+			Error:   "NOT_FOUND",
+			Message: err.Error(),
+		})
+		return
+	}
+
 	if err := h.repo.ResolveReport(reportID, req.Status, req.ModeratorNotes, moderatorID); err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{
 			Error:   "NOT_FOUND",
@@ -177,6 +186,39 @@ func (h *AdminHandler) ResolveReport(c *gin.Context) {
 		})
 		return
 	}
+
+	// ACTIONED: retirar el contenido denunciado y avisar a su autor
+	if req.Status == "ACTIONED" {
+		removed := false
+		switch report.TargetType {
+		case "POST":
+			if post, err := h.repo.GetPostByID(report.TargetID); err == nil && h.repo.RemovePostByAdmin(post.ID) == nil {
+				removed = true
+				notify(h.repo, post.AuthorID, moderatorID, "Contenido retirado",
+					"Tu publicación «"+post.Title+"» fue retirada por moderación ("+report.ReasonCode+")", notifAccount)
+			}
+		case "COMMENT":
+			if cm, err := h.repo.GetCommentByID(report.TargetID); err == nil && h.repo.DeleteComment(cm.ID) == nil {
+				removed = true
+				notify(h.repo, cm.UserID, moderatorID, "Contenido retirado",
+					"Tu comentario fue retirado por moderación ("+report.ReasonCode+")", notifPost(cm.PostID))
+			}
+		}
+		if removed {
+			_ = h.repo.CreateModerationLog(&models.ModerationLog{
+				ModeratorID: moderatorID,
+				ActionType:  "REMOVE_CONTENT",
+				TargetID:    report.TargetID,
+				Reason:      fmt.Sprintf("%s retirado por denuncia (%s)", report.TargetType, report.ReasonCode),
+			})
+		}
+	}
+
+	verdict := "fue descartada tras revisarla"
+	if req.Status == "ACTIONED" {
+		verdict = "fue aceptada y el contenido se retiró"
+	}
+	notify(h.repo, report.ReporterID, moderatorID, "Denuncia revisada", "Tu denuncia "+verdict+". ¡Gracias por avisar!", notifAccount)
 
 	_ = h.repo.CreateModerationLog(&models.ModerationLog{
 		ModeratorID: moderatorID,
@@ -351,6 +393,20 @@ func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
 		return
 	}
 
+	callerID := c.GetString("user_id")
+	targetName := targetID
+	if u, err := h.repo.GetUserByID(targetID); err == nil {
+		targetName = "u/" + u.Username
+	}
+	_ = h.repo.CreateModerationLog(&models.ModerationLog{
+		ModeratorID: callerID,
+		ActionType:  "UPDATE_ROLE",
+		TargetID:    targetID,
+		Reason:      fmt.Sprintf("Rol global de %s cambiado a %s", targetName, req.GlobalRole),
+	})
+	notify(h.repo, targetID, callerID, "Cambio de rol",
+		"Un administrador cambió tu rol global a "+req.GlobalRole, notifAccount)
+
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,
 		Message: "Rol global actualizado a " + req.GlobalRole,
@@ -382,6 +438,17 @@ func (h *AdminHandler) UpdateUserStatus(c *gin.Context) {
 	if !req.IsActive {
 		msg = "Cuenta suspendida globalmente e invalidación de sesiones en Redis aplicada"
 	}
+
+	action, reason := "ACTIVATE_USER", "Cuenta reactivada"
+	if !req.IsActive {
+		action, reason = "SUSPEND_USER", "Cuenta suspendida: "+req.FreezeReason
+	}
+	_ = h.repo.CreateModerationLog(&models.ModerationLog{
+		ModeratorID: c.GetString("user_id"),
+		ActionType:  action,
+		TargetID:    targetID,
+		Reason:      reason,
+	})
 
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,

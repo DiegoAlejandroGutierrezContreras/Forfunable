@@ -1062,6 +1062,13 @@ func (p *PostgresRepository) MarkNotificationRead(id, userID string) error {
 	return err
 }
 
+func (p *PostgresRepository) MarkAllNotificationsRead(userID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := p.db.ExecContext(ctx, `UPDATE notifications SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE`, userID)
+	return err
+}
+
 func (p *PostgresRepository) GetNotificationSettings(userID string) (*models.NotificationSettings, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1128,11 +1135,17 @@ func (p *PostgresRepository) ListReports(communityID, status string, page, limit
 	defer cancel()
 	offset := (page - 1) * limit
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT id, reporter_id, target_id, target_type, reason_code,
-		        COALESCE(description,''), status, resolved_by, COALESCE(resolution_notes,''), created_at
-		 FROM reports
-		 WHERE ($1 = '' OR status::text = $1)
-		 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+		`SELECT r.id, r.reporter_id, r.target_id, r.target_type, r.reason_code,
+		        COALESCE(r.description,''), r.status, r.resolved_by, COALESCE(r.resolution_notes,''), r.created_at,
+		        COALESCE(u.username, ''),
+		        COALESCE(p.id::text, cm.post_id::text, ''),
+		        COALESCE(p.title, cm.content, '')
+		 FROM reports r
+		 LEFT JOIN users u ON u.id = r.reporter_id
+		 LEFT JOIN posts p ON r.target_type = 'POST' AND p.id = r.target_id
+		 LEFT JOIN comments cm ON r.target_type = 'COMMENT' AND cm.id = r.target_id
+		 WHERE ($1 = '' OR r.status::text = $1)
+		 ORDER BY r.created_at DESC LIMIT $2 OFFSET $3`,
 		status, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("error al listar denuncias: %w", err)
@@ -1142,11 +1155,33 @@ func (p *PostgresRepository) ListReports(communityID, status string, page, limit
 	var reports []*models.Report
 	for rows.Next() {
 		r := &models.Report{}
-		_ = rows.Scan(&r.ID, &r.ReporterID, &r.TargetID, &r.TargetType, &r.ReasonCode,
-			&r.Description, &r.Status, &r.ResolvedBy, &r.ResolutionNotes, &r.CreatedAt)
+		if err := rows.Scan(&r.ID, &r.ReporterID, &r.TargetID, &r.TargetType, &r.ReasonCode,
+			&r.Description, &r.Status, &r.ResolvedBy, &r.ResolutionNotes, &r.CreatedAt,
+			&r.ReporterUsername, &r.TargetPostID, &r.TargetPreview); err != nil {
+			return nil, err
+		}
 		reports = append(reports, r)
 	}
 	return reports, nil
+}
+
+func (p *PostgresRepository) GetReportByID(id string) (*models.Report, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	r := &models.Report{}
+	err := p.db.QueryRowContext(ctx,
+		`SELECT id, reporter_id, target_id, target_type, reason_code,
+		        COALESCE(description,''), status, resolved_by, COALESCE(resolution_notes,''), created_at
+		 FROM reports WHERE id = $1`, id).
+		Scan(&r.ID, &r.ReporterID, &r.TargetID, &r.TargetType, &r.ReasonCode,
+			&r.Description, &r.Status, &r.ResolvedBy, &r.ResolutionNotes, &r.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("denuncia no encontrada")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error al obtener denuncia: %w", err)
+	}
+	return r, nil
 }
 
 func (p *PostgresRepository) ResolveReport(id, status, notes, resolvedBy string) error {
@@ -1203,13 +1238,14 @@ func (p *PostgresRepository) ListModerationLogs(moderatorID, actionType, fromDat
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT id, moderator_id, community_id, action_type, target_id, reason, created_at
-		 FROM moderation_logs
-		 WHERE ($1 = '' OR moderator_id::text = $1)
-		   AND ($2 = '' OR action_type = $2)
-		   AND ($3 = '' OR created_at >= $3::timestamptz)
-		   AND ($4 = '' OR created_at <= $4::timestamptz)
-		 ORDER BY created_at DESC LIMIT 200`,
+		`SELECT l.id, l.moderator_id, COALESCE(u.username, ''), l.community_id, l.action_type, l.target_id, l.reason, l.created_at
+		 FROM moderation_logs l
+		 LEFT JOIN users u ON u.id = l.moderator_id
+		 WHERE ($1 = '' OR l.moderator_id::text = $1)
+		   AND ($2 = '' OR l.action_type = $2)
+		   AND ($3 = '' OR l.created_at >= $3::timestamptz)
+		   AND ($4 = '' OR l.created_at <= $4::timestamptz)
+		 ORDER BY l.created_at DESC LIMIT 200`,
 		moderatorID, actionType, fromDate, toDate)
 	if err != nil {
 		return nil, fmt.Errorf("error al listar logs: %w", err)
@@ -1219,7 +1255,7 @@ func (p *PostgresRepository) ListModerationLogs(moderatorID, actionType, fromDat
 	var logs []*models.ModerationLog
 	for rows.Next() {
 		l := &models.ModerationLog{}
-		_ = rows.Scan(&l.ID, &l.ModeratorID, &l.CommunityID, &l.ActionType, &l.TargetID, &l.Reason, &l.CreatedAt)
+		_ = rows.Scan(&l.ID, &l.ModeratorID, &l.ModeratorUsername, &l.CommunityID, &l.ActionType, &l.TargetID, &l.Reason, &l.CreatedAt)
 		logs = append(logs, l)
 	}
 	return logs, nil

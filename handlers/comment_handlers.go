@@ -88,6 +88,20 @@ func (h *CommentHandler) CreateComment(c *gin.Context) {
 		return
 	}
 
+	// Avisar al autor del comentario padre (respuesta) o al autor del post (comentario nuevo)
+	actor := c.GetString("username")
+	if post, err := h.repo.GetPostByID(comment.PostID); err == nil {
+		if comment.ParentCommentID != nil {
+			if parent, err := h.repo.GetCommentByID(*comment.ParentCommentID); err == nil {
+				notify(h.repo, parent.UserID, userID, "Nueva respuesta",
+					"u/"+actor+" respondió a tu comentario en «"+post.Title+"»", notifPost(post.ID))
+			}
+		} else {
+			notify(h.repo, post.AuthorID, userID, "Nuevo comentario",
+				"u/"+actor+" comentó tu publicación «"+post.Title+"»", notifPost(post.ID))
+		}
+	}
+
 	c.JSON(http.StatusCreated, comment)
 }
 

@@ -67,6 +67,7 @@ type Repository interface {
 	// Notificaciones
 	ListNotifications(userID string, page, limit int) ([]*models.Notification, error)
 	MarkNotificationRead(id, userID string) error
+	MarkAllNotificationsRead(userID string) error
 	GetNotificationSettings(userID string) (*models.NotificationSettings, error)
 	UpdateNotificationSettings(settings *models.NotificationSettings) error
 	CreateNotification(notif *models.Notification) error
@@ -75,6 +76,7 @@ type Repository interface {
 	CreateReport(report *models.Report) error
 	ListReports(communityID, status string, page, limit int) ([]*models.Report, error)
 	ResolveReport(id, status, notes, resolvedBy string) error
+	GetReportByID(id string) (*models.Report, error)
 	BanUser(ban *models.CommunityBan) error
 	UnbanUser(userID, communityID, reason string) error
 	IsUserBannedFromCommunity(userID, communityID string) (bool, error)
