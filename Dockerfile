@@ -38,6 +38,7 @@ RUN mkdir -p /cloudsql && chown -R appuser:appgroup /cloudsql
 # Copiar binario compilado desde la etapa builder
 COPY --from=builder /app/forfunable-api /app/forfunable-api
 COPY --from=builder /app/openapi.yaml /app/openapi.yaml
+COPY --from=builder /app/frontend /app/frontend
 
 # Asignar propiedad a usuario sin privilegios
 RUN chown -R appuser:appgroup /app

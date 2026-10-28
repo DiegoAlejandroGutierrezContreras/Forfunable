@@ -210,7 +210,7 @@ gcloud run deploy $SERVICE_NAME `
     --service-account=$SA_EMAIL `
     --allow-unauthenticated `
     --add-cloudsql-instances=$INSTANCE_CONNECTION_NAME `
-    --set-env-vars="INSTANCE_CONNECTION_NAME=$INSTANCE_CONNECTION_NAME,DB_NAME=$DB_NAME,DB_USER=$DB_USER,ENVIRONMENT=production,GIN_MODE=release,PORT=8080" `
+    --set-env-vars="INSTANCE_CONNECTION_NAME=$INSTANCE_CONNECTION_NAME,DB_NAME=$DB_NAME,DB_USER=$DB_USER,APP_ENV=production,GIN_MODE=release,PORT=8080" `
     --set-secrets="JWT_SECRET=forfunable-jwt-secret:latest,DB_PASSWORD=forfunable-db-password:latest" `
     --cpu=1 `
     --memory=512Mi `
