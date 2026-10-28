@@ -52,7 +52,7 @@ window.CreateCommunityView = {
               <label class="form-label">Nombre del Canal (URL y menciones)</label>
               <div style="display: flex; align-items: center;">
                 <span style="background: var(--surface-subtle); padding: 10px 14px; border: 1px solid var(--border-subtle); border-right: none; border-radius: var(--radius-md) 0 0 var(--radius-md); color: var(--text-muted); font-family: var(--font-mono);">c/</span>
-                <input type="text" id="comm-name" class="form-input" style="border-radius: 0 var(--radius-md) var(--radius-md) 0;" required placeholder="ej: react-internals" pattern="^[a-zA-Z0-9_-]{3,24}$">
+                <input type="text" id="comm-name" class="form-input" style="border-radius: 0 var(--radius-md) var(--radius-md) 0;" required placeholder="ej: react-internals" pattern="[a-zA-Z0-9_\\-]{3,24}" title="Entre 3 y 24 caracteres: letras, números, guiones o guiones bajos, sin espacios">
               </div>
               <span style="font-size: 11px; color: var(--text-muted);">Entre 3 y 24 caracteres. Solo letras, números y guiones.</span>
             </div>
@@ -92,7 +92,7 @@ window.CreateCommunityView = {
       name: document.getElementById('comm-name').value.trim(),
       title: document.getElementById('comm-title').value.trim(),
       description: document.getElementById('comm-desc').value.trim(),
-      rules: document.getElementById('comm-rules').value.trim()
+      rules_text: document.getElementById('comm-rules').value.trim()
     };
 
     try {

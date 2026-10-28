@@ -56,6 +56,7 @@ type KarmaDetailResponse struct {
 type CreateCommunityRequest struct {
 	Name        string `json:"name" binding:"required,min=3,max=50"`
 	Description string `json:"description"`
+	RulesText   string `json:"rules_text"`
 }
 
 type CommunityDetailResponse struct {

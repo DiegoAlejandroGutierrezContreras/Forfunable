@@ -272,8 +272,8 @@ func (p *PostgresRepository) CreateCommunity(c *models.Community) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	query := `INSERT INTO communities (id, name, description, creator_id) VALUES ($1, $2, $3, $4) RETURNING created_at`
-	err := p.db.QueryRowContext(ctx, query, c.ID, c.Name, c.Description, c.CreatorID).Scan(&c.CreatedAt)
+	query := `INSERT INTO communities (id, name, description, rules_text, creator_id) VALUES ($1, $2, $3, NULLIF($4, ''), $5) RETURNING created_at`
+	err := p.db.QueryRowContext(ctx, query, c.ID, c.Name, c.Description, c.RulesText, c.CreatorID).Scan(&c.CreatedAt)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
 			return errors.New("ya existe una comunidad con este nombre")

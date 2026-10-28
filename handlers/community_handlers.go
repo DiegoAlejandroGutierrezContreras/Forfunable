@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,9 @@ import (
 	"forfunable/repository"
 	"github.com/gin-gonic/gin"
 )
+
+// communityNamePattern replica el CHECK de communities.name en database/schema.sql
+var communityNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 type CommunityHandler struct {
 	repo repository.Repository
@@ -80,12 +84,22 @@ func (h *CommunityHandler) CreateCommunity(c *gin.Context) {
 		return
 	}
 
+	if !communityNamePattern.MatchString(req.Name) {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error:   "BAD_REQUEST",
+			Message: "El nombre de la comunidad solo admite letras, números, guiones y guiones bajos, sin espacios",
+		})
+		return
+	}
+
 	req.Name = middleware.SanitizeText(req.Name)
 	req.Description = middleware.SanitizeText(req.Description)
+	req.RulesText = middleware.SanitizeText(req.RulesText)
 
 	comm := &models.Community{
 		Name:        req.Name,
 		Description: req.Description,
+		RulesText:   req.RulesText,
 		CreatorID:   user.ID,
 	}
 
