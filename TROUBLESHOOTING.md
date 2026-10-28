@@ -135,3 +135,14 @@ Este documento registra los cuellos de botella, riesgos de concurrencia, segurid
 
 - **Prueba que Evita la Regresión**:  
   `tests/security_middleware_test.go` (`TestCSRF_IssuesCookieWithSameSiteStrict`, `TestCSRF_CookieAuthMutation`, `TestCSRF_NoAmbientCredentialAllowed`, `TestRequireRecaptcha`).
+
+---
+
+### [2026-10-28 21:00:00 UTC] - Vistas del Frontend Legacy sin Datos por Listas Envueltas y Template Literal Roto en Crear Post
+
+- **Descripción del Problema**:  
+  El backend devuelve las colecciones envueltas en objetos (`{items}`, `{comments}`, `{messages}`, `{hits}`), pero las vistas de `frontend/js/views/` iteraban la respuesta como si fuera un arreglo, por lo que feed, comunidades, comentarios, notificaciones, chat y paneles de administración quedaban vacíos o fallaban. Además, en `createPost.js` el placeholder del textarea contenía tres comillas invertidas sin escapar dentro de un *template literal*, lo que cerraba la cadena antes de tiempo y rompía la vista.
+
+- **Solución Aplicada**:  
+  - `frontend/js/api.js`: helper `listFrom(data, key = 'items')` que desenvuelve la colección (acepta también un arreglo directo o `null`), aplicado en `listCommunities`, `getFeed`, `listPosts`, `getPostComments` (`comments`), `listNotifications`, `listConversations`, `listMessages` (`messages`), `adminListUsers`, `adminGetAuditLogs` y `adminListReports`. `predictiveSearch` agrupa `hits` por `type` (`community`/`post`) en `{ communities, posts, users }`.  
+  - `frontend/js/views/createPost.js`: comillas invertidas escapadas (`\`\`\``).
