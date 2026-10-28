@@ -432,6 +432,13 @@ window.utils = {
       .replace(/'/g, '&#039;');
   },
 
+  // Argumento seguro para manejadores inline (onclick="fn(${jsArg(x)})"): genera un literal JS
+  // con JSON.stringify y lo escapa para el atributo. escapeHTML solo NO basta: el navegador
+  // decodifica &#039; antes de ejecutar el JS y la comilla rompe la cadena.
+  jsArg(value) {
+    return this.escapeHTML(JSON.stringify(String(value ?? '')));
+  },
+
   // Parser ligero de Markdown seguro
   renderMarkdown(text) {
     if (!text) return '';

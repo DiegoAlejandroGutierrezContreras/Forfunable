@@ -146,3 +146,16 @@ Este documento registra los cuellos de botella, riesgos de concurrencia, segurid
 - **Solución Aplicada**:  
   - `frontend/js/api.js`: helper `listFrom(data, key = 'items')` que desenvuelve la colección (acepta también un arreglo directo o `null`), aplicado en `listCommunities`, `getFeed`, `listPosts`, `getPostComments` (`comments`), `listNotifications`, `listConversations`, `listMessages` (`messages`), `adminListUsers`, `adminGetAuditLogs` y `adminListReports`. `predictiveSearch` agrupa `hits` por `type` (`community`/`post`) en `{ communities, posts, users }`.  
   - `frontend/js/views/createPost.js`: comillas invertidas escapadas (`\`\`\``).
+
+---
+
+### [2026-10-28 22:30:00 UTC] - XSS Almacenado por Nombres de Usuario en Manejadores onclick (Chat y Explorador)
+
+- **Descripción del Problema**:  
+  Las vistas de chat y explorador interpolaban nombres de usuario dentro de cadenas JS en atributos `onclick` (`ChatView.requestChat('${u}')`, `Router.navigate('/u/${u}')`, `selectConversation(..., '${c.other_username}')`). El nombre de usuario solo valida longitud, así que un registro como `a');alert(document.cookie)//` ejecutaba código en el navegador de quien abriera el explorador. Usar `escapeHTML` dentro del atributo tampoco protege: el navegador decodifica `&#039;` a `'` antes de ejecutar el manejador.
+
+- **Solución Aplicada**:  
+  Nuevo helper `window.utils.jsArg(value)` en `frontend/js/api.js`, que genera un literal JS con `JSON.stringify` y lo escapa para el atributo. Aplicado en `chat.js` (Aceptar solicitud, lista de conversaciones) y `search.js` (Personas activas y resultados de usuarios), con `encodeURIComponent` en las rutas `/u/`.
+
+- **Regla para Vistas Nuevas**:  
+  Nunca interpolar datos de usuario como `'${valor}'` dentro de `onclick`; usar `${window.utils.jsArg(valor)}` (sin comillas alrededor). Los UUID y `communities.name` (restringido por `CHECK`) no requieren este tratamiento.

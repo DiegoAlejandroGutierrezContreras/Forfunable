@@ -80,7 +80,7 @@ window.ChatView = {
             <div style="font-weight: 600; font-size: 13px;">u/${window.utils.escapeHTML(r.sender_username || 'usuario')}</div>
             <div style="font-size: 12px; color: var(--text-secondary); margin: 4px 0 8px;">${window.utils.escapeHTML(r.initial_message || '')}</div>
             <div style="display: flex; gap: 6px;">
-              <button class="btn btn-primary" style="padding: 2px 10px; font-size: 11px;" onclick="ChatView.respondRequest('${r.id}', 'ACCEPT', '${window.utils.escapeHTML(r.sender_username || '')}')">Aceptar</button>
+              <button class="btn btn-primary" style="padding: 2px 10px; font-size: 11px;" onclick="ChatView.respondRequest('${r.id}', 'ACCEPT', ${window.utils.jsArg(r.sender_username)})">Aceptar</button>
               <button class="btn btn-secondary" style="padding: 2px 10px; font-size: 11px;" onclick="ChatView.respondRequest('${r.id}', 'REJECT')">Rechazar</button>
             </div>
           </div>
@@ -120,7 +120,7 @@ window.ChatView = {
       }
 
       listEl.innerHTML = this.conversations.map(c => `
-        <div class="card" style="padding: 10px; margin-bottom: 6px; cursor: pointer; border-color: ${this.activeConvId === c.id ? 'var(--primary)' : 'var(--border-subtle)'}; background: ${this.activeConvId === c.id ? 'var(--surface-high)' : 'var(--surface-card)'};" onclick="ChatView.selectConversation('${c.id}', '${c.other_username || 'usuario'}')">
+        <div class="card" style="padding: 10px; margin-bottom: 6px; cursor: pointer; border-color: ${this.activeConvId === c.id ? 'var(--primary)' : 'var(--border-subtle)'}; background: ${this.activeConvId === c.id ? 'var(--surface-high)' : 'var(--surface-card)'};" onclick="ChatView.selectConversation('${c.id}', ${window.utils.jsArg(c.other_username || 'usuario')})">
           <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); margin-bottom: 2px;">
             u/${window.utils.escapeHTML(c.other_username || 'usuario')}
           </div>

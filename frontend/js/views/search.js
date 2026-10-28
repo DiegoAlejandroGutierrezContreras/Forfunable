@@ -68,8 +68,8 @@ window.SearchView = {
       section('🆕 PUBLICADO RECIENTEMENTE', recentPosts.length ? grid(recentPosts.map(postCard).join('')) : ''),
       section('👥 PERSONAS ACTIVAS', people.length ? `<div style="display: flex; flex-wrap: wrap; gap: 8px;">${people.map(u => `
         <div class="card" style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: 0;">
-          <span style="cursor: pointer; font-weight: 600;" onclick="Router.navigate('/u/${u}')">u/${window.utils.escapeHTML(u)}</span>
-          <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="ChatView.requestChat('${u}')">💬 Mensaje</button>
+          <span style="cursor: pointer; font-weight: 600;" onclick="Router.navigate('/u/' + ${window.utils.jsArg(encodeURIComponent(u))})">u/${window.utils.escapeHTML(u)}</span>
+          <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="ChatView.requestChat(${window.utils.jsArg(u)})">💬 Mensaje</button>
         </div>`).join('')}</div>` : '')
     ].join('') || `
       <div class="state-empty" style="border: none;">
@@ -148,9 +148,9 @@ window.SearchView = {
           <h3 style="margin-bottom: 8px; font-size: 14px; color: var(--text-secondary);">USUARIOS</h3>
           <div style="display: grid; gap: 8px;">
             ${users.map(u => `
-              <div class="card" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="Router.navigate('/u/${u.username}')">
+              <div class="card" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="Router.navigate('/u/' + ${window.utils.jsArg(encodeURIComponent(u.username))})">
                 <div style="font-weight: 600;">u/${window.utils.escapeHTML(u.username)}</div>
-                <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="event.stopPropagation(); ChatView.requestChat('${u.username}')">💬 Mensaje</button>
+                <button class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="event.stopPropagation(); ChatView.requestChat(${window.utils.jsArg(u.username)})">💬 Mensaje</button>
               </div>
             `).join('')}
           </div>
