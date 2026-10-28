@@ -215,7 +215,7 @@ window.PostDetailView = {
     try {
       await window.api.createComment({
         post_id: postId,
-        parent_id: parentId,
+        parent_comment_id: parentId || null,
         content: content
       });
 

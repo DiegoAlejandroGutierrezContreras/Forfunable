@@ -105,7 +105,8 @@ window.CreatePostView = {
     const payload = {
       community_id: document.getElementById('post-community-select').value,
       title: document.getElementById('post-title').value.trim(),
-      content: document.getElementById('post-content').value.trim()
+      content_type: 'TEXT',
+      body_text: document.getElementById('post-content').value.trim()
     };
 
     try {

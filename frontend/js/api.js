@@ -171,7 +171,7 @@ class ApiClient {
   async updateStatus(status) {
     return await this.request('/users/me/status', {
       method: 'PATCH',
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ presence_status: status })
     });
   }
 
@@ -286,14 +286,14 @@ class ApiClient {
   async votePost(postId, voteType) {
     return await this.request(`/votes/posts/${postId}`, {
       method: 'POST',
-      body: JSON.stringify({ vote_type: voteType })
+      body: JSON.stringify({ vote_value: voteType })
     });
   }
 
   async voteComment(commentId, voteType) {
     return await this.request(`/votes/comments/${commentId}`, {
       method: 'POST',
-      body: JSON.stringify({ vote_type: voteType })
+      body: JSON.stringify({ vote_value: voteType })
     });
   }
 
@@ -335,14 +335,14 @@ class ApiClient {
   async sendMessage(convId, content) {
     return await this.request(`/chats/conversations/${convId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ message_text: content })
     });
   }
 
   async createChatRequest(targetUserId, message) {
     return await this.request('/chats/requests', {
       method: 'POST',
-      body: JSON.stringify({ target_user_id: targetUserId, message })
+      body: JSON.stringify({ recipient_user_id: targetUserId, initial_message: message })
     });
   }
 
@@ -357,7 +357,7 @@ class ApiClient {
   async adminUpdateUserRole(userId, role) {
     return await this.request(`/admin/users/${userId}/role`, {
       method: 'PATCH',
-      body: JSON.stringify({ role })
+      body: JSON.stringify({ global_role: role })
     });
   }
 
@@ -370,9 +370,11 @@ class ApiClient {
   }
 
   async adminResolveReport(reportId, resolution) {
+    // Acciones de la vista → estados que acepta el backend
+    const status = { DISMISS: 'DISMISSED', RESOLVE_DELETE: 'ACTIONED' }[resolution] || resolution;
     return await this.request(`/admin/moderation/reports/${reportId}`, {
-      method: 'POST',
-      body: JSON.stringify({ resolution })
+      method: 'PATCH',
+      body: JSON.stringify({ status })
     });
   }
 }
