@@ -119,3 +119,19 @@ Este documento registra los cuellos de botella, riesgos de concurrencia, segurid
 - **Prueba que Evita la Regresión**:  
   `tests/media_storage_test.go` (`TestMediaUploadURL_MIMETypes`, `TestMediaUploadURL_UnsupportedMIME`, `TestMediaUploadURL_FileSizeValidation`, `TestMediaUploadURL_Security`, `TestMediaUpload_IntegrationFlow`, `TestGCSMediaSigner_RealRSA`).
 
+
+---
+
+### [2026-10-28 19:30:00 UTC] - Cookie de Refresh sin Secure/SameSite y Ausencia de Validación reCAPTCHA y CSRF
+
+- **Descripción del Problema**:  
+  `UX_MAPPING.md` exige que el `refresh_token` viaje en una cookie `HttpOnly; SameSite=Strict; Secure`, que Login/Registro/Creación de Comunidad validen `recaptcha_token` (reCAPTCHA Enterprise) y que las mutaciones validen `X-CSRF-Token`. El backend emitía la cookie con `Secure=false` y sin `SameSite`, aceptaba `recaptcha_token` en los DTOs sin verificarlo nunca, y solo listaba `X-CSRF-Token` en las cabeceras CORS permitidas sin comprobarlo.
+
+- **Solución Aplicada**:  
+  - `handlers/auth_handlers.go`: helper `setRefreshCookie` con `SameSite=Strict`, `HttpOnly` y `Secure` cuando `APP_ENV=production`.  
+  - `services/recaptcha.go` + `middleware/recaptcha.go`: verificación contra la API REST de reCAPTCHA Enterprise (acciones `LOGIN`, `REGISTER`, `CREATE_COMMUNITY`, puntuación mínima `RECAPTCHA_MIN_SCORE`). Con `RECAPTCHA_BYPASS=true` (valor por defecto) se omite y se registra un aviso en producción; con `false`, el arranque falla si faltan `RECAPTCHA_PROJECT_ID`, `RECAPTCHA_SITE_KEY` o `RECAPTCHA_API_KEY` (Secret Manager).  
+  - `middleware/csrf.go`: patrón *double-submit cookie* (`csrf_token` legible por JS + cabecera `X-CSRF-Token`). Se exige solo cuando la mutación se autentica por cookie (`refresh_token`) sin cabecera `Authorization`, para no romper Bruno, clientes móviles ni tests.  
+  - `frontend/js/api.js`: reenvía `X-CSRF-Token` en mutaciones.
+
+- **Prueba que Evita la Regresión**:  
+  `tests/security_middleware_test.go` (`TestCSRF_IssuesCookieWithSameSiteStrict`, `TestCSRF_CookieAuthMutation`, `TestCSRF_NoAmbientCredentialAllowed`, `TestRequireRecaptcha`).

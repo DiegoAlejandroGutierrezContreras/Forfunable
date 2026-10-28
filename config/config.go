@@ -24,6 +24,10 @@ type Config struct {
 	Environment            string
 	GINMode                string
 	RecaptchaBypass        bool
+	RecaptchaProjectID     string  // RECAPTCHA_PROJECT_ID: proyecto GCP con reCAPTCHA Enterprise
+	RecaptchaSiteKey       string  // RECAPTCHA_SITE_KEY: clave de sitio (pública) usada por el frontend
+	RecaptchaAPIKey        string  // RECAPTCHA_API_KEY: inyectada desde Secret Manager
+	RecaptchaMinScore      float64 // RECAPTCHA_MIN_SCORE: puntuación mínima aceptada (0.0 - 1.0)
 	StorageBucket          string
 	StorageSigningEmail    string
 	StorageCredentialsJSON string
@@ -48,6 +52,10 @@ func LoadConfig() *Config {
 	env := getEnv("APP_ENV", "development")
 	ginMode := getEnv("GIN_MODE", "debug")
 	bypassRecaptcha, _ := strconv.ParseBool(getEnv("RECAPTCHA_BYPASS", "true"))
+	recaptchaMinScore, err := strconv.ParseFloat(getEnv("RECAPTCHA_MIN_SCORE", "0.5"), 64)
+	if err != nil || recaptchaMinScore < 0 || recaptchaMinScore > 1 {
+		recaptchaMinScore = 0.5
+	}
 	bucket := getEnv("GCS_BUCKET", "forfunable-media")
 	storageEmail := getEnv("GCS_SIGNING_EMAIL", os.Getenv("SERVICE_ACCOUNT_EMAIL"))
 	storageCreds := os.Getenv("GCS_CREDENTIALS_JSON")
@@ -81,6 +89,10 @@ func LoadConfig() *Config {
 		Environment:            env,
 		GINMode:                ginMode,
 		RecaptchaBypass:        bypassRecaptcha,
+		RecaptchaProjectID:     os.Getenv("RECAPTCHA_PROJECT_ID"),
+		RecaptchaSiteKey:       os.Getenv("RECAPTCHA_SITE_KEY"),
+		RecaptchaAPIKey:        os.Getenv("RECAPTCHA_API_KEY"),
+		RecaptchaMinScore:      recaptchaMinScore,
 		StorageBucket:          bucket,
 		StorageSigningEmail:    storageEmail,
 		StorageCredentialsJSON: storageCreds,
@@ -94,6 +106,12 @@ func getEnv(key, defaultVal string) string {
 		return val
 	}
 	return defaultVal
+}
+
+// IsProduction indica si la aplicación corre con APP_ENV=production.
+// Se usa para activar el atributo Secure de las cookies de sesión y CSRF.
+func (c *Config) IsProduction() bool {
+	return c.Environment == "production"
 }
 
 // BuildDSN construye el Data Source Name para PostgreSQL según el entorno:

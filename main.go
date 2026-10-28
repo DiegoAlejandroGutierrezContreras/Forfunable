@@ -47,6 +47,22 @@ func main() {
 	r.Use(middleware.SecurityHeaders())
 	rateLimiter := middleware.NewRateLimiter(300, time.Minute)
 	r.Use(rateLimiter.Middleware())
+	r.Use(middleware.CSRFProtection(cfg.IsProduction()))
+
+	// --- reCAPTCHA Enterprise (login, registro y creación de comunidades) ---
+	var recaptchaVerifier services.RecaptchaVerifier = services.BypassRecaptchaVerifier{}
+	if cfg.RecaptchaBypass {
+		if cfg.IsProduction() {
+			log.Println("[WARN] RECAPTCHA_BYPASS=true en producción: los formularios críticos no se verifican contra bots")
+		}
+	} else {
+		enterpriseVerifier, err := services.NewEnterpriseRecaptchaVerifier(cfg.RecaptchaProjectID, cfg.RecaptchaSiteKey, cfg.RecaptchaAPIKey, cfg.RecaptchaMinScore)
+		if err != nil {
+			log.Fatalf("[FATAL] %v", err)
+		}
+		recaptchaVerifier = enterpriseVerifier
+		log.Println("[OK] reCAPTCHA Enterprise verification active")
+	}
 
 	// --- Health Check (FASE 3) ---
 	// Verifica API + PostgreSQL. Devuelve 503 si la BD no responde.
@@ -103,8 +119,8 @@ func main() {
 		// Módulo 1.1: Autenticación, Sesión y Perfiles
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", authHandler.Login)
+			auth.POST("/register", middleware.RequireRecaptcha(recaptchaVerifier, services.RecaptchaActionRegister), authHandler.Register)
+			auth.POST("/login", middleware.RequireRecaptcha(recaptchaVerifier, services.RecaptchaActionLogin), authHandler.Login)
 			auth.POST("/refresh", authHandler.Refresh)
 			auth.POST("/logout", authHandler.Logout)
 		}
@@ -133,7 +149,7 @@ func main() {
 			commAuth := communities.Group("")
 			commAuth.Use(middleware.AuthRequired(cfg.JWTSecret))
 			{
-				commAuth.POST("", commHandler.CreateCommunity)
+				commAuth.POST("", middleware.RequireRecaptcha(recaptchaVerifier, services.RecaptchaActionCreateCommunity), commHandler.CreateCommunity)
 				commAuth.POST("/:id/join", commHandler.JoinCommunity)
 				commAuth.DELETE("/:id/leave", commHandler.LeaveCommunity)
 			}

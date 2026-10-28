@@ -178,10 +178,12 @@ Cada componente de vista en Next.js debe implementar rigurosamente los 4 estados
 1. **Sanitización de Markdown:** Todo contenido generado por usuarios en hilos y comentarios debe pasar por un parser seguro con lista blanca estricta (ej. `DOMPurify` / `rehype-sanitize`) para neutralizar ataques XSS. Prohibido el uso de `dangerouslySetInnerHTML` sin sanitización previa.
 2. **Políticas CSP (Content Security Policy):**
    * `default-src 'self'`
-   * `connect-src 'self' https://stitch.googleapis.com https://*.run.app`
+   * `connect-src 'self'` (el navegador solo habla con su propio origen; Next.js reenvía `/api/*` a Cloud Run mediante `rewrites`)
+   * `script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/`
+   * `frame-src https://www.google.com/recaptcha/`
    * `img-src 'self' data: https://storage.googleapis.com`
 3. **Manejo de Tokens en Cliente:**
    * El `access_token` se almacena exclusivamente en memoria o estado reactivo de la aplicación.
    * Prohibido almacenar tokens JWT en `localStorage` o `sessionStorage`.
-4. **Protección CSRF:** Validar tokens CSRF en encabezados `X-CSRF-Token` para todas las mutaciones (`POST`, `PATCH`, `DELETE`).
-5. **Protección Perimetral y Bots:** Formulario de Login, Registro y Creación de Comunidad integran tokens de `reCAPTCHA Enterprise`.
+4. **Protección CSRF:** El backend emite la cookie `csrf_token` (legible por JS, `SameSite=Strict`). El cliente debe copiar su valor en la cabecera `X-CSRF-Token` en todas las mutaciones (`POST`, `PATCH`, `DELETE`). El backend la exige cuando la petición se autentica por cookie (`refresh_token`) sin `Authorization`, y responde `403 CSRF_TOKEN_INVALID` si falta o no coincide.
+5. **Protección Perimetral y Bots:** Formulario de Login, Registro y Creación de Comunidad integran tokens de `reCAPTCHA Enterprise` en el campo `recaptcha_token`, generados con `grecaptcha.enterprise.execute(siteKey, { action })` usando las acciones `LOGIN`, `REGISTER` y `CREATE_COMMUNITY`. Rechazo: `403 RECAPTCHA_FAILED`.

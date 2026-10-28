@@ -21,6 +21,13 @@ func NewAuthHandler(repo repository.Repository, cfg *config.Config) *AuthHandler
 	return &AuthHandler{repo: repo, cfg: cfg}
 }
 
+// setRefreshCookie emite la cookie refresh_token con HttpOnly y SameSite=Strict.
+// Secure solo se activa en producción para permitir pruebas locales sobre http://localhost.
+func (h *AuthHandler) setRefreshCookie(c *gin.Context, value string, maxAge int) {
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("refresh_token", value, maxAge, "/", "", h.cfg.IsProduction(), true)
+}
+
 // Register maneja POST /api/v1/auth/register (201 Created)
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req models.RegisterRequest
@@ -86,7 +93,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("refresh_token", refreshToken, int(h.cfg.JWTRefreshTTL.Seconds()), "/", "", false, true)
+	h.setRefreshCookie(c, refreshToken, int(h.cfg.JWTRefreshTTL.Seconds()))
 	c.JSON(http.StatusCreated, models.AuthResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -141,7 +148,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("refresh_token", refreshToken, int(h.cfg.JWTRefreshTTL.Seconds()), "/", "", false, true)
+	h.setRefreshCookie(c, refreshToken, int(h.cfg.JWTRefreshTTL.Seconds()))
 	c.JSON(http.StatusOK, models.AuthResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
@@ -200,7 +207,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("refresh_token", newRefreshToken, int(h.cfg.JWTRefreshTTL.Seconds()), "/", "", false, true)
+	h.setRefreshCookie(c, newRefreshToken, int(h.cfg.JWTRefreshTTL.Seconds()))
 	c.JSON(http.StatusOK, models.AuthResponse{
 		AccessToken:  newAccessToken,
 		RefreshToken: newRefreshToken,
@@ -212,7 +219,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 // Logout maneja POST /api/v1/auth/logout (200 OK)
 func (h *AuthHandler) Logout(c *gin.Context) {
-	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
+	h.setRefreshCookie(c, "", -1)
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,
 		Message: "Sesión cerrada correctamente",

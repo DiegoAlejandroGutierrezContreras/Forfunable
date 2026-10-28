@@ -37,6 +37,11 @@ class ApiClient {
     this.notifyAuthChange();
   }
 
+  getCookie(name) {
+    const match = document.cookie.split('; ').find(row => row.startsWith(`${name}=`));
+    return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
+  }
+
   async request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     const headers = {
@@ -46,6 +51,13 @@ class ApiClient {
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    // Protección CSRF (double-submit cookie): reenviar csrf_token en mutaciones
+    const method = (options.method || 'GET').toUpperCase();
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+      const csrfToken = this.getCookie('csrf_token');
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
     }
 
     try {
