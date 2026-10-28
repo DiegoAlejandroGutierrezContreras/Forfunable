@@ -193,6 +193,7 @@ func main() {
 		chats := v1.Group("/chats")
 		chats.Use(middleware.AuthRequired(cfg.JWTSecret))
 		{
+			chats.GET("/requests", chatHandler.ListChatRequests)
 			chats.POST("/requests", chatHandler.CreateChatRequest)
 			chats.PATCH("/requests/:id", chatHandler.UpdateChatRequest)
 			chats.GET("/conversations", chatHandler.ListConversations)

@@ -859,6 +859,31 @@ func (p *PostgresRepository) GetChatRequestByID(id string) (*models.ChatRequest,
 	return req, err
 }
 
+// ListIncomingChatRequests devuelve las solicitudes PENDING dirigidas al usuario, con el nombre del remitente.
+func (p *PostgresRepository) ListIncomingChatRequests(userID string) ([]*models.ChatRequest, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT r.id, r.sender_id, r.recipient_id, u.username, COALESCE(r.initial_message,''), r.status, r.created_at, r.updated_at
+		 FROM chat_requests r JOIN users u ON u.id = r.sender_id
+		 WHERE r.recipient_id = $1 AND r.status = 'PENDING'
+		 ORDER BY r.created_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error al listar solicitudes de chat: %w", err)
+	}
+	defer rows.Close()
+
+	var reqs []*models.ChatRequest
+	for rows.Next() {
+		r := &models.ChatRequest{}
+		if err := rows.Scan(&r.ID, &r.SenderID, &r.RecipientID, &r.SenderUsername, &r.InitialMessage, &r.Status, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		reqs = append(reqs, r)
+	}
+	return reqs, nil
+}
+
 func (p *PostgresRepository) UpdateChatRequestStatus(id, status string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -872,9 +897,14 @@ func (p *PostgresRepository) ListConversations(userID string, page, limit int) (
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT id, user1_id, user2_id, created_at, updated_at
-		 FROM chat_conversations WHERE user1_id = $1 OR user2_id = $1
-		 ORDER BY updated_at DESC`, userID)
+		`SELECT c.id, c.user1_id, c.user2_id, u.username,
+		   COALESCE((SELECT m.message_text FROM chat_messages m WHERE m.conversation_id = c.id
+		             ORDER BY m.created_at DESC LIMIT 1), ''),
+		   c.created_at, c.updated_at
+		 FROM chat_conversations c
+		 JOIN users u ON u.id = CASE WHEN c.user1_id = $1 THEN c.user2_id ELSE c.user1_id END
+		 WHERE c.user1_id = $1 OR c.user2_id = $1
+		 ORDER BY c.updated_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -883,7 +913,7 @@ func (p *PostgresRepository) ListConversations(userID string, page, limit int) (
 	var convs []*models.ChatConversation
 	for rows.Next() {
 		c := &models.ChatConversation{}
-		_ = rows.Scan(&c.ID, &c.User1ID, &c.User2ID, &c.CreatedAt, &c.UpdatedAt)
+		_ = rows.Scan(&c.ID, &c.User1ID, &c.User2ID, &c.OtherUsername, &c.LastMessage, &c.CreatedAt, &c.UpdatedAt)
 		convs = append(convs, c)
 	}
 	return convs, nil
@@ -974,7 +1004,12 @@ func (p *PostgresRepository) CreateChatMessage(msg *models.ChatMessage) error {
 	_, err := p.db.ExecContext(ctx,
 		`INSERT INTO chat_messages (id, conversation_id, sender_id, message_text, attachment_url) VALUES ($1, $2, $3, $4, $5)`,
 		msg.ID, msg.ConversationID, msg.SenderID, msg.MessageText, msg.AttachmentURL)
-	return err
+	if err != nil {
+		return err
+	}
+	// Ordena la bandeja por actividad reciente
+	_, _ = p.db.ExecContext(ctx, `UPDATE chat_conversations SET updated_at = NOW() WHERE id = $1`, msg.ConversationID)
+	return nil
 }
 
 func (p *PostgresRepository) BlockUser(blockerID, blockedID string) error {
@@ -1283,12 +1318,15 @@ func (p *PostgresRepository) SearchPredictive(query string) ([]map[string]interf
 	defer cancel()
 
 	rows, err := p.db.QueryContext(ctx,
-		`SELECT id, title, 'post' AS type FROM posts
+		`SELECT id::text, title, 'post' AS type FROM posts
 		 WHERE is_removed = FALSE AND title ILIKE '%' || $1 || '%'
 		 UNION ALL
-		 SELECT id, name AS title, 'community' AS type FROM communities
+		 SELECT id::text, name AS title, 'community' AS type FROM communities
 		 WHERE name ILIKE '%' || $1 || '%'
-		 LIMIT 15`, query)
+		 UNION ALL
+		 SELECT id::text, username AS title, 'user' AS type FROM users
+		 WHERE is_active = TRUE AND username ILIKE '%' || $1 || '%'
+		 LIMIT 20`, query)
 	if err != nil {
 		return nil, fmt.Errorf("error en búsqueda predictiva: %w", err)
 	}

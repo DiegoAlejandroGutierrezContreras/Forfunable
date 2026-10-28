@@ -1017,6 +1017,22 @@ func (m *MemoryRepository) CreateChatRequest(req *models.ChatRequest) error {
 	return nil
 }
 
+func (m *MemoryRepository) ListIncomingChatRequests(userID string) ([]*models.ChatRequest, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var reqs []*models.ChatRequest
+	for _, r := range m.chatRequests {
+		if r.RecipientID == userID && r.Status == models.ChatPending {
+			cp := *r
+			if u, ok := m.users[r.SenderID]; ok {
+				cp.SenderUsername = u.Username
+			}
+			reqs = append(reqs, &cp)
+		}
+	}
+	return reqs, nil
+}
+
 func (m *MemoryRepository) GetChatRequestByID(id string) (*models.ChatRequest, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

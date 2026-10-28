@@ -6,6 +6,7 @@
 window.ChatView = {
   conversations: [],
   activeConvId: null,
+  activeUsername: null,
 
   async render(container) {
     if (!window.api.user) {
@@ -27,6 +28,8 @@ window.ChatView = {
             <h3 style="font-size: 15px;">💬 Mensajes</h3>
             <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="ChatView.promptNewChat()">+ Nuevo</button>
           </div>
+
+          <div id="chat-requests-list"></div>
 
           <div id="conversations-list" style="flex: 1; overflow-y: auto; padding-top: 8px;">
             <div class="skeleton-card" style="margin-bottom: 6px;">
@@ -60,8 +63,50 @@ window.ChatView = {
     await this.loadConversations();
   },
 
+  // Solicitudes pendientes recibidas: hay que aceptarlas para que se abra la conversación
+  async loadRequests() {
+    const reqEl = document.getElementById('chat-requests-list');
+    if (!reqEl) return;
+    try {
+      const requests = await window.api.listChatRequests();
+      if (!requests.length) {
+        reqEl.innerHTML = '';
+        return;
+      }
+      reqEl.innerHTML = `
+        <div style="padding: 8px var(--space-sm) 0; font-size: 11px; font-weight: 600; color: var(--text-secondary);">SOLICITUDES (${requests.length})</div>
+        ${requests.map(r => `
+          <div class="card" style="padding: 10px; margin: 6px 0;">
+            <div style="font-weight: 600; font-size: 13px;">u/${window.utils.escapeHTML(r.sender_username || 'usuario')}</div>
+            <div style="font-size: 12px; color: var(--text-secondary); margin: 4px 0 8px;">${window.utils.escapeHTML(r.initial_message || '')}</div>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-primary" style="padding: 2px 10px; font-size: 11px;" onclick="ChatView.respondRequest('${r.id}', 'ACCEPT', '${window.utils.escapeHTML(r.sender_username || '')}')">Aceptar</button>
+              <button class="btn btn-secondary" style="padding: 2px 10px; font-size: 11px;" onclick="ChatView.respondRequest('${r.id}', 'REJECT')">Rechazar</button>
+            </div>
+          </div>
+        `).join('')}
+      `;
+    } catch (_) {
+      reqEl.innerHTML = '';
+    }
+  },
+
+  async respondRequest(requestId, action, senderUsername = '') {
+    try {
+      const res = await window.api.respondChatRequest(requestId, action);
+      window.utils.showToast(action === 'ACCEPT' ? 'Solicitud aceptada' : 'Solicitud rechazada', 'info');
+      await this.loadConversations();
+      if (action === 'ACCEPT' && res && res.conversation_id) {
+        await this.selectConversation(res.conversation_id, senderUsername || 'usuario');
+      }
+    } catch (err) {
+      window.utils.showToast(err.message || 'Error al responder la solicitud', 'error');
+    }
+  },
+
   async loadConversations() {
     const listEl = document.getElementById('conversations-list');
+    await this.loadRequests();
     try {
       this.conversations = await window.api.listConversations();
 
@@ -92,6 +137,7 @@ window.ChatView = {
 
   async selectConversation(convId, otherUsername) {
     this.activeConvId = convId;
+    this.activeUsername = otherUsername;
     document.getElementById('chat-header').innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 14px; font-weight: 600;">u/${window.utils.escapeHTML(otherUsername)}</span>
@@ -114,7 +160,7 @@ window.ChatView = {
         const isMine = window.api.user && m.sender_id === window.api.user.id;
         return `
           <div style="align-self: ${isMine ? 'flex-end' : 'flex-start'}; max-width: 75%; background: ${isMine ? 'var(--primary)' : 'var(--surface-elevated)'}; color: ${isMine ? 'var(--on-primary)' : 'var(--text-primary)'}; padding: 8px 12px; border-radius: 12px; font-size: 13px; border: 1px solid ${isMine ? 'transparent' : 'var(--border-subtle)'};">
-            <div>${window.utils.escapeHTML(m.content)}</div>
+            <div>${window.utils.escapeHTML(m.message_text || '')}</div>
             <div style="font-size: 10px; opacity: 0.7; text-align: right; margin-top: 2px;">${window.utils.formatTime(m.created_at)}</div>
           </div>
         `;
@@ -135,21 +181,31 @@ window.ChatView = {
     input.value = '';
     try {
       await window.api.sendMessage(this.activeConvId, content);
-      await this.selectConversation(this.activeConvId, 'chat');
+      await this.selectConversation(this.activeConvId, this.activeUsername);
+      await this.loadConversations();
     } catch (err) {
       window.utils.showToast(err.message || 'Error al enviar mensaje', 'error');
     }
   },
 
   promptNewChat() {
-    const target = prompt('Ingresa el ID de usuario o @handle para solicitar chat:');
+    const target = prompt('Nombre de usuario para solicitar chat (ej: kiba_dev o u/kiba_dev):');
     if (!target) return;
-    const msg = prompt('Mensaje inicial de presentación:');
+    this.requestChat(target.trim());
+  },
+
+  // También se usa desde el Explorador y los perfiles
+  requestChat(username) {
+    if (!window.api.user) {
+      Router.navigate('/login');
+      return;
+    }
+    const msg = prompt(`Mensaje de presentación para u/${username.replace(/^u\//, '').replace(/^@/, '')}:`);
     if (!msg) return;
 
-    window.api.createChatRequest(target, msg)
+    window.api.createChatRequest(username, msg)
       .then(() => {
-        window.utils.showToast('Solicitud de chat enviada', 'info');
+        window.utils.showToast('Solicitud enviada. Cuando la acepten, el chat aparecerá en Mensajes Privados', 'info');
       })
       .catch(err => {
         window.utils.showToast(err.message || 'Error al enviar solicitud', 'error');

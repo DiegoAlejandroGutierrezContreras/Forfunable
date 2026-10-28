@@ -54,6 +54,7 @@ type Repository interface {
 	// Chat y Mensajería Privada
 	CreateChatRequest(req *models.ChatRequest) error
 	GetChatRequestByID(id string) (*models.ChatRequest, error)
+	ListIncomingChatRequests(userID string) ([]*models.ChatRequest, error)
 	UpdateChatRequestStatus(id, status string) error
 	ListConversations(userID string, page, limit int) ([]*models.ChatConversation, error)
 	GetConversationByID(id string) (*models.ChatConversation, error)

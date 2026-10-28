@@ -136,6 +136,7 @@ type ChatRequest struct {
 	ID             string    `json:"id"`
 	SenderID       string    `json:"sender_id"`
 	RecipientID    string    `json:"recipient_id"`
+	SenderUsername string    `json:"sender_username,omitempty"`
 	InitialMessage string    `json:"initial_message"`
 	Status         string    `json:"status"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -144,11 +145,13 @@ type ChatRequest struct {
 
 // ChatConversation representa una sala de chat privada activa
 type ChatConversation struct {
-	ID        string    `json:"id"`
-	User1ID   string    `json:"user1_id"`
-	User2ID   string    `json:"user2_id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	User1ID       string    `json:"user1_id"`
+	User2ID       string    `json:"user2_id"`
+	OtherUsername string    `json:"other_username,omitempty"` // el otro participante, visto desde quien consulta
+	LastMessage   string    `json:"last_message,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // ChatMessage representa un mensaje dentro de una conversación

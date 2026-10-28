@@ -9,6 +9,7 @@ import (
 	"forfunable/models"
 	"forfunable/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type ChatHandler struct {
@@ -31,6 +32,22 @@ func (h *ChatHandler) CreateChatRequest(c *gin.Context) {
 		})
 		return
 	}
+
+	// El destinatario puede llegar como UUID o como nombre de usuario ("kiba_dev", "u/kiba_dev", "@kiba_dev")
+	recipient := strings.TrimSpace(req.RecipientUserID)
+	if _, err := uuid.Parse(recipient); err != nil {
+		username := strings.TrimPrefix(strings.TrimPrefix(recipient, "u/"), "@")
+		user, err := h.repo.GetUserByUsername(username)
+		if err != nil {
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error:   "NOT_FOUND",
+				Message: "No existe el usuario u/" + username,
+			})
+			return
+		}
+		recipient = user.ID
+	}
+	req.RecipientUserID = recipient
 
 	if senderID == req.RecipientUserID {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
@@ -74,6 +91,25 @@ func (h *ChatHandler) CreateChatRequest(c *gin.Context) {
 	c.JSON(http.StatusCreated, chatReq)
 }
 
+// ListChatRequests maneja GET /api/v1/chats/requests (200 OK): solicitudes pendientes recibidas
+func (h *ChatHandler) ListChatRequests(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	reqs, err := h.repo.ListIncomingChatRequests(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: "Error al recuperar solicitudes de chat",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"items": reqs,
+		"count": len(reqs),
+	})
+}
+
 // UpdateChatRequest maneja PATCH /api/v1/chats/requests/:id (200 OK)
 func (h *ChatHandler) UpdateChatRequest(c *gin.Context) {
 	userID := c.GetString("user_id")
@@ -93,6 +129,14 @@ func (h *ChatHandler) UpdateChatRequest(c *gin.Context) {
 		c.JSON(http.StatusForbidden, models.ErrorResponse{
 			Error:   "FORBIDDEN",
 			Message: "No tienes permiso para responder a esta solicitud",
+		})
+		return
+	}
+
+	if chatReq.Status != models.ChatPending {
+		c.JSON(http.StatusConflict, models.ErrorResponse{
+			Error:   "CONFLICT",
+			Message: "Esta solicitud ya fue respondida",
 		})
 		return
 	}
@@ -126,6 +170,31 @@ func (h *ChatHandler) UpdateChatRequest(c *gin.Context) {
 
 	if actionReq.Action == "BLOCK" {
 		_ = h.repo.BlockUser(userID, chatReq.SenderID)
+	}
+
+	if actionReq.Action == "ACCEPT" {
+		// Aceptar abre la conversación y la inicia con el mensaje de presentación
+		conv, err := h.repo.GetOrCreateConversation(chatReq.SenderID, chatReq.RecipientID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error:   "INTERNAL_ERROR",
+				Message: "Error al abrir la conversación",
+			})
+			return
+		}
+		if chatReq.InitialMessage != "" {
+			_ = h.repo.CreateChatMessage(&models.ChatMessage{
+				ConversationID: conv.ID,
+				SenderID:       chatReq.SenderID,
+				MessageText:    chatReq.InitialMessage,
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":         true,
+			"message":         "Solicitud aceptada",
+			"conversation_id": conv.ID,
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, models.StandardResponse{

@@ -341,7 +341,7 @@ class ApiClient {
     return {
       communities: hits.filter(h => h.type === 'community').map(h => ({ id: h.id, name: h.title })),
       posts: hits.filter(h => h.type === 'post').map(h => ({ id: h.id, title: h.title })),
-      users: []
+      users: hits.filter(h => h.type === 'user').map(h => ({ id: h.id, username: h.title }))
     };
   }
 
@@ -361,6 +361,18 @@ class ApiClient {
     return await this.request(`/chats/conversations/${convId}/messages`, {
       method: 'POST',
       body: JSON.stringify({ message_text: content })
+    });
+  }
+
+  async listChatRequests() {
+    return this.listFrom(await this.request('/chats/requests'));
+  }
+
+  // action: ACCEPT | REJECT | BLOCK. Al aceptar, la respuesta incluye conversation_id
+  async respondChatRequest(requestId, action) {
+    return await this.request(`/chats/requests/${requestId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action })
     });
   }
 
