@@ -67,6 +67,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		PasswordHash: string(hashedPass),
 		GlobalRole:   models.RoleUser,
 		KarmaScore:   10,
+		IsActive:     true,
 	}
 
 	if err := h.repo.CreateUser(user); err != nil {

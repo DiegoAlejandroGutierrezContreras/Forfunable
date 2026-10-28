@@ -22,9 +22,15 @@ class ApiClient {
     this.authListeners.forEach(cb => cb(this.user));
   }
 
+  // El backend envía global_role; las vistas comprueban user.role
+  withRole(user) {
+    if (user && user.role === undefined && user.global_role !== undefined) user.role = user.global_role;
+    return user;
+  }
+
   setSession(token, user) {
     this.token = token;
-    this.user = user;
+    this.user = this.withRole(user);
     if (user) {
       sessionStorage.setItem('forfunable_user_hint', JSON.stringify({
         id: user.id,
@@ -144,7 +150,7 @@ class ApiClient {
       const data = await this.request('/auth/refresh', { method: 'POST' });
       if (data && data.access_token) {
         this.token = data.access_token;
-        if (data.user) this.user = data.user;
+        if (data.user) this.user = this.withRole(data.user);
         this.notifyAuthChange();
         return true;
       }
@@ -164,7 +170,7 @@ class ApiClient {
   async getMe() {
     const data = await this.request('/users/me');
     if (data) {
-      this.user = data;
+      this.user = this.withRole(data);
       this.notifyAuthChange();
     }
     return data;
@@ -369,7 +375,7 @@ class ApiClient {
   // ==========================================
 
   async adminListUsers(limit = 50, offset = 0) {
-    return this.listFrom(await this.request(`/admin/users?limit=${limit}&offset=${offset}`));
+    return this.listFrom(await this.request(`/admin/users?limit=${limit}&offset=${offset}`)).map(u => this.withRole(u));
   }
 
   async adminUpdateUserRole(userId, role) {
