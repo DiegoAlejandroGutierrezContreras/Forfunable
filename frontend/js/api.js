@@ -37,6 +37,13 @@ class ApiClient {
     this.notifyAuthChange();
   }
 
+  // El backend envuelve las colecciones ({items}, {comments}, {messages}, {hits});
+  // las vistas esperan arreglos. Acepta también un arreglo directo o null.
+  listFrom(data, key = 'items') {
+    if (Array.isArray(data)) return data;
+    return Array.isArray(data?.[key]) ? data[key] : [];
+  }
+
   getCookie(name) {
     const match = document.cookie.split('; ').find(row => row.startsWith(`${name}=`));
     return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
@@ -181,7 +188,7 @@ class ApiClient {
   // ==========================================
 
   async listCommunities() {
-    return await this.request('/communities');
+    return this.listFrom(await this.request('/communities'));
   }
 
   async getCommunity(name) {
@@ -212,12 +219,12 @@ class ApiClient {
   // ==========================================
 
   async getFeed(filter = 'hot', limit = 20, offset = 0) {
-    return await this.request(`/recommendations/feed?filter=${filter}&limit=${limit}&offset=${offset}`);
+    return this.listFrom(await this.request(`/recommendations/feed?filter=${filter}&limit=${limit}&offset=${offset}`));
   }
 
   async listPosts(params = {}) {
     const query = new URLSearchParams(params).toString();
-    return await this.request(`/posts${query ? '?' + query : ''}`);
+    return this.listFrom(await this.request(`/posts${query ? '?' + query : ''}`));
   }
 
   async getPost(postId) {
@@ -249,7 +256,7 @@ class ApiClient {
   // ==========================================
 
   async getPostComments(postId) {
-    return await this.request(`/posts/${postId}/comments`);
+    return this.listFrom(await this.request(`/posts/${postId}/comments`), 'comments');
   }
 
   async createComment(commentData) {
@@ -295,7 +302,7 @@ class ApiClient {
   // ==========================================
 
   async listNotifications() {
-    return await this.request('/notifications');
+    return this.listFrom(await this.request('/notifications'));
   }
 
   async markNotificationRead(notifId) {
@@ -305,7 +312,12 @@ class ApiClient {
   }
 
   async predictiveSearch(query) {
-    return await this.request(`/search/predictive?q=${encodeURIComponent(query)}`);
+    const hits = this.listFrom(await this.request(`/search/predictive?q=${encodeURIComponent(query)}`), 'hits');
+    return {
+      communities: hits.filter(h => h.type === 'community').map(h => ({ id: h.id, name: h.title })),
+      posts: hits.filter(h => h.type === 'post').map(h => ({ id: h.id, title: h.title })),
+      users: []
+    };
   }
 
   // ==========================================
@@ -313,11 +325,11 @@ class ApiClient {
   // ==========================================
 
   async listConversations() {
-    return await this.request('/chats/conversations');
+    return this.listFrom(await this.request('/chats/conversations'));
   }
 
   async listMessages(convId) {
-    return await this.request(`/chats/conversations/${convId}/messages`);
+    return this.listFrom(await this.request(`/chats/conversations/${convId}/messages`), 'messages');
   }
 
   async sendMessage(convId, content) {
@@ -339,7 +351,7 @@ class ApiClient {
   // ==========================================
 
   async adminListUsers(limit = 50, offset = 0) {
-    return await this.request(`/admin/users?limit=${limit}&offset=${offset}`);
+    return this.listFrom(await this.request(`/admin/users?limit=${limit}&offset=${offset}`));
   }
 
   async adminUpdateUserRole(userId, role) {
@@ -350,11 +362,11 @@ class ApiClient {
   }
 
   async adminGetAuditLogs(limit = 50) {
-    return await this.request(`/admin/audit/logs?limit=${limit}`);
+    return this.listFrom(await this.request(`/admin/audit/logs?limit=${limit}`));
   }
 
   async adminListReports() {
-    return await this.request('/admin/moderation/reports');
+    return this.listFrom(await this.request('/admin/moderation/reports'));
   }
 
   async adminResolveReport(reportId, resolution) {

@@ -44,7 +44,7 @@ window.CreatePostView = {
               </div>
             </div>
 
-            <textarea id="post-content" class="form-textarea" rows="12" required placeholder="Describe tu propuesta, arquitectura o comparte código con triple acento grave (```)..."></textarea>
+            <textarea id="post-content" class="form-textarea" rows="12" required placeholder="Describe tu propuesta, arquitectura o comparte código con triple acento grave (\`\`\`)..."></textarea>
             
             <div id="post-preview" class="post-markdown-body" style="display: none; min-height: 200px; background: var(--surface-0); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px; color: var(--text-primary);"></div>
           </div>
