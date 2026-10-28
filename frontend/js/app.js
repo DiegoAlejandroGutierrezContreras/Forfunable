@@ -129,7 +129,7 @@ window.Router = {
         sidebarList.innerHTML = comms.slice(0, 8).map(c => `
           <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: var(--radius-md); cursor: pointer; transition: background 150ms ease;" class="sidebar-item" onclick="Router.navigate('/c/${c.name}')">
             <span style="font-size: 13px; color: var(--text-primary); font-weight: 500;">c/${window.utils.escapeHTML(c.name)}</span>
-            <span style="font-size: 11px; color: var(--text-muted);">${c.subscribers_count || 1}</span>
+            <span style="font-size: 11px; color: var(--text-muted);">${c.subscribers_count || 0}</span>
           </div>
         `).join('');
       } else {

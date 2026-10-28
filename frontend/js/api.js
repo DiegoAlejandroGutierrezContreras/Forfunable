@@ -203,7 +203,8 @@ class ApiClient {
   // ==========================================
 
   async listCommunities() {
-    return this.listFrom(await this.request('/communities'));
+    return this.listFrom(await this.request('/communities'))
+      .map(c => ({ ...c, subscribers_count: c.members_count || 0 }));
   }
 
   async getCommunity(name) {
@@ -213,7 +214,7 @@ class ApiClient {
     return {
       ...comm,
       rules: comm.rules_text,
-      subscribers_count: comm.members_count,
+      subscribers_count: comm.members_count || 0,
       moderators: data?.moderators || [],
       is_member: !!data?.is_member
     };

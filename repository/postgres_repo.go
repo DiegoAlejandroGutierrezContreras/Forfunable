@@ -325,7 +325,8 @@ func (p *PostgresRepository) ListCommunities(search, sort string, page, limit in
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	offset := (page - 1) * limit
-	query := `SELECT id, name, COALESCE(description,''), COALESCE(rules_text,''), is_private, age_restricted, creator_id, created_at
+	query := `SELECT id, name, COALESCE(description,''), COALESCE(rules_text,''), is_private, age_restricted, creator_id, created_at,
+		(SELECT count(*) FROM community_members m WHERE m.community_id = communities.id)
 		FROM communities
 		WHERE ($1 = '' OR name ILIKE '%' || $1 || '%')
 		ORDER BY created_at DESC LIMIT $2 OFFSET $3`
@@ -338,7 +339,7 @@ func (p *PostgresRepository) ListCommunities(search, sort string, page, limit in
 	var comms []*models.Community
 	for rows.Next() {
 		c := &models.Community{}
-		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.RulesText, &c.IsPrivate, &c.AgeRestricted, &c.CreatorID, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.RulesText, &c.IsPrivate, &c.AgeRestricted, &c.CreatorID, &c.CreatedAt, &c.MembersCount); err != nil {
 			return nil, 0, err
 		}
 		comms = append(comms, c)

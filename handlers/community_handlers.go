@@ -118,6 +118,11 @@ func (h *CommunityHandler) CreateCommunity(c *gin.Context) {
 		return
 	}
 
+	// El fundador queda suscrito a su propia comunidad
+	if err := h.repo.JoinCommunity(comm.ID, user.ID); err == nil {
+		comm.MembersCount = 1
+	}
+
 	c.JSON(http.StatusCreated, comm)
 }
 

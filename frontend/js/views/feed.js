@@ -7,6 +7,7 @@ window.FeedView = {
   activeFilter: 'hot',
 
   async render(container, communityName = null) {
+    this.communityName = communityName;
     container.innerHTML = `
       <div class="feed-header" style="margin-bottom: var(--space-md); display: flex; justify-content: space-between; align-items: center;">
         <div>
@@ -42,7 +43,8 @@ window.FeedView = {
 
   async setFilter(filter) {
     this.activeFilter = filter;
-    await this.loadPosts();
+    // Mantener la comunidad actual; sin esto el filtro cargaba el feed global
+    await this.loadPosts(this.communityName);
   },
 
   async loadPosts(communityName = null) {

@@ -64,7 +64,7 @@ window.CommunityView = {
               ${isSubscribed ? '✓ Miembro' : '+ Unirse'}
             </button>
             <span style="font-size: 12px; color: var(--text-muted);">
-              👥 ${this.currentCommunity.subscribers_count || 1} miembros
+              👥 <span id="community-members-count">${this.currentCommunity.subscribers_count || 0}</span> miembros
             </span>
           </div>
         </div>
@@ -103,6 +103,17 @@ window.CommunityView = {
     }
   },
 
+  // Vuelve a pedir el conteo real tras unirse/salir y actualiza la barra lateral
+  async refreshMembersCount() {
+    try {
+      const fresh = await window.api.getCommunity(this.currentCommunity.name);
+      this.currentCommunity = fresh;
+      const countEl = document.getElementById('community-members-count');
+      if (countEl) countEl.textContent = fresh.subscribers_count;
+      window.Router.loadSidebarCommunities();
+    } catch (_) {}
+  },
+
   async toggleSubscribe(communityId) {
     if (!window.api.user) {
       Router.navigate('/login');
@@ -123,6 +134,7 @@ window.CommunityView = {
         btn.className = 'btn btn-secondary';
         window.utils.showToast('¡Te has unido a la comunidad!', 'info');
       }
+      await this.refreshMembersCount();
     } catch (err) {
       window.utils.showToast(err.message || 'Error en la suscripción', 'error');
     }
