@@ -44,6 +44,15 @@ class ApiClient {
     return Array.isArray(data?.[key]) ? data[key] : [];
   }
 
+  // El backend envía upvotes_count/downvotes_count (posts) y score (comentarios); las vistas muestran net_votes
+  withNetVotes(item) {
+    if (!item || item.net_votes !== undefined) return item;
+    item.net_votes = item.score !== undefined
+      ? item.score
+      : (item.upvotes_count || 0) - (item.downvotes_count || 0);
+    return item;
+  }
+
   getCookie(name) {
     const match = document.cookie.split('; ').find(row => row.startsWith(`${name}=`));
     return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
@@ -192,7 +201,16 @@ class ApiClient {
   }
 
   async getCommunity(name) {
-    return await this.request(`/communities/${encodeURIComponent(name)}`);
+    // El backend responde { community, moderators, is_member }; las vistas usan un objeto plano
+    const data = await this.request(`/communities/${encodeURIComponent(name)}`);
+    const comm = data?.community || data || {};
+    return {
+      ...comm,
+      rules: comm.rules_text,
+      subscribers_count: comm.members_count,
+      moderators: data?.moderators || [],
+      is_member: !!data?.is_member
+    };
   }
 
   async createCommunity(communityData) {
@@ -219,16 +237,16 @@ class ApiClient {
   // ==========================================
 
   async getFeed(filter = 'hot', limit = 20, offset = 0) {
-    return this.listFrom(await this.request(`/recommendations/feed?filter=${filter}&limit=${limit}&offset=${offset}`));
+    return this.listFrom(await this.request(`/recommendations/feed?filter=${filter}&limit=${limit}&offset=${offset}`)).map(p => this.withNetVotes(p));
   }
 
   async listPosts(params = {}) {
     const query = new URLSearchParams(params).toString();
-    return this.listFrom(await this.request(`/posts${query ? '?' + query : ''}`));
+    return this.listFrom(await this.request(`/posts${query ? '?' + query : ''}`)).map(p => this.withNetVotes(p));
   }
 
   async getPost(postId) {
-    return await this.request(`/posts/${postId}`);
+    return this.withNetVotes(await this.request(`/posts/${postId}`));
   }
 
   async createPost(postData) {
@@ -256,7 +274,7 @@ class ApiClient {
   // ==========================================
 
   async getPostComments(postId) {
-    return this.listFrom(await this.request(`/posts/${postId}/comments`), 'comments');
+    return this.listFrom(await this.request(`/posts/${postId}/comments`), 'comments').map(c => this.withNetVotes(c));
   }
 
   async createComment(commentData) {

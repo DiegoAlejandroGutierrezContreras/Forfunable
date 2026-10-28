@@ -52,7 +52,10 @@ window.FeedView = {
     try {
       let posts = [];
       if (communityName) {
-        posts = await window.api.listPosts({ community: communityName });
+        // El backend filtra por community_id, no por nombre
+        const current = window.CommunityView?.currentCommunity;
+        const comm = current?.name === communityName ? current : await window.api.getCommunity(communityName);
+        posts = await window.api.listPosts({ community_id: comm.id });
       } else {
         posts = await window.api.getFeed(this.activeFilter);
       }

@@ -87,6 +87,7 @@ type Post struct {
 	CommunityID     string    `json:"community_id"`
 	AuthorID        string    `json:"author_id"`
 	AuthorUsername  string    `json:"author_username,omitempty"`
+	CommunityName   string    `json:"community_name,omitempty"`
 	Title           string    `json:"title"`
 	ContentType     string    `json:"content_type"`
 	BodyText        string    `json:"body_text"`

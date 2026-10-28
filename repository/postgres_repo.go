@@ -305,10 +305,12 @@ func (p *PostgresRepository) GetCommunityByName(name string) (*models.Community,
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	c := &models.Community{}
-	query := `SELECT id, name, COALESCE(description,''), COALESCE(rules_text,''), is_private, age_restricted, creator_id, created_at
+	query := `SELECT id, name, COALESCE(description,''), COALESCE(rules_text,''), is_private, age_restricted, creator_id, created_at,
+		(SELECT count(*) FROM community_members m WHERE m.community_id = communities.id)
 		FROM communities WHERE name = $1`
 	err := p.db.QueryRowContext(ctx, query, name).Scan(
 		&c.ID, &c.Name, &c.Description, &c.RulesText, &c.IsPrivate, &c.AgeRestricted, &c.CreatorID, &c.CreatedAt,
+		&c.MembersCount,
 	)
 	if err == sql.ErrNoRows {
 		return nil, errors.New("comunidad no encontrada")
@@ -443,13 +445,14 @@ func (p *PostgresRepository) GetPostByID(id string) (*models.Post, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	post := &models.Post{}
-	query := `SELECT p.id, p.community_id, p.author_id, u.username,
+	query := `SELECT p.id, p.community_id, p.author_id, u.username, cm.name,
 		p.title, p.content_type, COALESCE(p.body_text,''), COALESCE(p.media_url,''),
 		p.upvotes_count, p.downvotes_count, p.comments_count, p.is_removed, p.created_at
 		FROM posts p JOIN users u ON p.author_id = u.id
+		JOIN communities cm ON p.community_id = cm.id
 		WHERE p.id = $1 AND p.is_removed = FALSE`
 	err := p.db.QueryRowContext(ctx, query, id).Scan(
-		&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername,
+		&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername, &post.CommunityName,
 		&post.Title, &post.ContentType, &post.BodyText, &post.MediaURL,
 		&post.UpvotesCount, &post.DownvotesCount, &post.CommentsCount, &post.IsRemoved, &post.CreatedAt,
 	)
@@ -466,10 +469,11 @@ func (p *PostgresRepository) ListPosts(communityID, sort string, page, limit int
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	offset := (page - 1) * limit
-	query := `SELECT p.id, p.community_id, p.author_id, u.username,
+	query := `SELECT p.id, p.community_id, p.author_id, u.username, cm.name,
 		p.title, p.content_type, COALESCE(p.body_text,''), COALESCE(p.media_url,''),
 		p.upvotes_count, p.downvotes_count, p.comments_count, p.is_removed, p.created_at
 		FROM posts p JOIN users u ON p.author_id = u.id
+		JOIN communities cm ON p.community_id = cm.id
 		WHERE p.is_removed = FALSE AND ($1 = '' OR p.community_id::text = $1)
 		ORDER BY p.created_at DESC LIMIT $2 OFFSET $3`
 	rows, err := p.db.QueryContext(ctx, query, communityID, limit, offset)
@@ -481,7 +485,7 @@ func (p *PostgresRepository) ListPosts(communityID, sort string, page, limit int
 	var posts []*models.Post
 	for rows.Next() {
 		post := &models.Post{}
-		if err := rows.Scan(&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername,
+		if err := rows.Scan(&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername, &post.CommunityName,
 			&post.Title, &post.ContentType, &post.BodyText, &post.MediaURL,
 			&post.UpvotesCount, &post.DownvotesCount, &post.CommentsCount, &post.IsRemoved, &post.CreatedAt); err != nil {
 			return nil, 0, err
@@ -502,11 +506,12 @@ func (p *PostgresRepository) UpdatePost(id, bodyText string) (*models.Post, erro
 	query := `UPDATE posts SET body_text = $2 WHERE id = $1 AND is_removed = FALSE
 		RETURNING id, community_id, author_id,
 		  (SELECT username FROM users WHERE id = author_id),
+		  (SELECT name FROM communities WHERE id = community_id),
 		  title, content_type, COALESCE(body_text,''), COALESCE(media_url,''),
 		  upvotes_count, downvotes_count, comments_count, is_removed, created_at`
 	post := &models.Post{}
 	err := p.db.QueryRowContext(ctx, query, id, bodyText).Scan(
-		&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername,
+		&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername, &post.CommunityName,
 		&post.Title, &post.ContentType, &post.BodyText, &post.MediaURL,
 		&post.UpvotesCount, &post.DownvotesCount, &post.CommentsCount, &post.IsRemoved, &post.CreatedAt,
 	)
@@ -539,12 +544,13 @@ func (p *PostgresRepository) GetRecommendedFeed(cursor string, limit int) ([]*mo
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	query := `SELECT p.id, p.community_id, p.author_id, u.username,
+	query := `SELECT p.id, p.community_id, p.author_id, u.username, cm.name,
 		p.title, p.content_type, COALESCE(p.body_text,''), COALESCE(p.media_url,''),
 		p.upvotes_count, p.downvotes_count, p.comments_count, p.is_removed, p.created_at,
 		(p.upvotes_count - p.downvotes_count)::float /
 		  POWER(EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600.0 + 2.0, 1.8) AS hot_score
 		FROM posts p JOIN users u ON p.author_id = u.id
+		JOIN communities cm ON p.community_id = cm.id
 		WHERE p.is_removed = FALSE
 		ORDER BY hot_score DESC
 		LIMIT $1`
@@ -559,7 +565,7 @@ func (p *PostgresRepository) GetRecommendedFeed(cursor string, limit int) ([]*mo
 	for rows.Next() {
 		post := &models.Post{}
 		if err := rows.Scan(
-			&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername,
+			&post.ID, &post.CommunityID, &post.AuthorID, &post.AuthorUsername, &post.CommunityName,
 			&post.Title, &post.ContentType, &post.BodyText, &post.MediaURL,
 			&post.UpvotesCount, &post.DownvotesCount, &post.CommentsCount, &post.IsRemoved, &post.CreatedAt,
 			&post.HotRankingScore,
