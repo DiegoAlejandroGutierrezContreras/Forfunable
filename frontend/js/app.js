@@ -38,6 +38,9 @@ window.Router = {
     // Actualizar Navbar de acuerdo al estado de sesión
     this.updateNavbar();
 
+    // Login y registro se muestran solos, sin el resto de la interfaz
+    document.body.classList.toggle('auth-mode', path === '/login' || path === '/register');
+
     // Enrutamiento Dinámico
     if (path === '/' || path === '') {
       await window.FeedView.render(mainContainer);

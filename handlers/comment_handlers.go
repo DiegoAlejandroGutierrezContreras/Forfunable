@@ -43,6 +43,8 @@ func (h *CommentHandler) ListComments(c *gin.Context) {
 		return
 	}
 
+	attachCommentVotes(h.repo, c.GetString("user_id"), comments)
+
 	c.JSON(http.StatusOK, gin.H{
 		"post_id":  postID,
 		"comments": comments,

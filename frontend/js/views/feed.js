@@ -101,12 +101,12 @@ window.FeedView = {
       feedContent.innerHTML = posts.map(post => `
         <div class="card" style="margin-bottom: var(--space-md); display: flex; gap: var(--space-md);" id="post-${post.id}">
           <!-- Widget Votación -->
-          <div class="vote-pill">
-            <button class="vote-btn ${post.user_vote === 1 ? 'voted-up' : ''}" onclick="FeedView.vote('${post.id}', 1)">▲</button>
+          <div class="vote-pill" data-vote-box="post:${post.id}" data-user-vote="${post.user_vote || 0}">
+            <button class="vote-btn ${post.user_vote === 1 ? 'voted-up' : ''}" data-vote-dir="1" onclick="FeedView.vote('${post.id}', 1)">▲</button>
             <span class="vote-score ${post.user_vote === 1 ? 'voted-up' : post.user_vote === -1 ? 'voted-down' : ''}" id="score-${post.id}">
               ${post.net_votes || post.votes_count || 0}
             </span>
-            <button class="vote-btn ${post.user_vote === -1 ? 'voted-down' : ''}" onclick="FeedView.vote('${post.id}', -1)">▼</button>
+            <button class="vote-btn ${post.user_vote === -1 ? 'voted-down' : ''}" data-vote-dir="-1" onclick="FeedView.vote('${post.id}', -1)">▼</button>
           </div>
 
           <!-- Contenido del Post -->
@@ -157,27 +157,7 @@ window.FeedView = {
   },
 
   async vote(postId, voteType) {
-    if (!window.api.user) {
-      Router.navigate('/login');
-      window.utils.showToast('Inicia sesión para votar en publicaciones', 'info');
-      return;
-    }
-
-    const scoreEl = document.getElementById(`score-${postId}`);
-    const postEl = document.getElementById(`post-${postId}`);
-    if (!scoreEl) return;
-
-    // Actualización optimista de UI
-    let currentScore = parseInt(scoreEl.textContent) || 0;
-    scoreEl.textContent = currentScore + voteType;
-    scoreEl.className = `vote-score ${voteType === 1 ? 'voted-up' : 'voted-down'}`;
-
-    try {
-      await window.api.votePost(postId, voteType);
-    } catch (err) {
-      scoreEl.textContent = currentScore;
-      window.utils.showToast('Error al registrar el voto en el buffer write-behind', 'error');
-    }
+    await window.utils.castVote('post', postId, voteType);
   },
 
   sharePost(postId) {

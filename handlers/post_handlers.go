@@ -57,6 +57,8 @@ func (h *PostHandler) ListPosts(c *gin.Context) {
 		return
 	}
 
+	attachPostVotes(h.repo, c.GetString("user_id"), posts...)
+
 	c.JSON(http.StatusOK, gin.H{
 		"items": posts,
 		"total": total,
@@ -123,6 +125,8 @@ func (h *PostHandler) GetPostDetail(c *gin.Context) {
 		})
 		return
 	}
+
+	attachPostVotes(h.repo, c.GetString("user_id"), post)
 
 	c.JSON(http.StatusOK, post)
 }

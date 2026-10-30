@@ -11,7 +11,7 @@ import (
 
 	"forfunable/models"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 // PostgresRepository implementa Repository usando Cloud SQL PostgreSQL.
@@ -711,6 +711,39 @@ func (p *PostgresRepository) DeleteComment(id string) error {
 }
 
 // --- Votos ---
+
+// GetUserPostVotes devuelve el voto (1/-1) del usuario en cada post indicado.
+func (p *PostgresRepository) GetUserPostVotes(userID string, postIDs []string) (map[string]int, error) {
+	return p.userVotes(`SELECT post_id::text, vote_value FROM post_votes WHERE user_id = $1 AND post_id::text = ANY($2)`, userID, postIDs)
+}
+
+// GetUserCommentVotes devuelve el voto (1/-1) del usuario en cada comentario indicado.
+func (p *PostgresRepository) GetUserCommentVotes(userID string, commentIDs []string) (map[string]int, error) {
+	return p.userVotes(`SELECT comment_id::text, vote_value FROM comment_votes WHERE user_id = $1 AND comment_id::text = ANY($2)`, userID, commentIDs)
+}
+
+func (p *PostgresRepository) userVotes(query, userID string, ids []string) (map[string]int, error) {
+	votes := map[string]int{}
+	if userID == "" || len(ids) == 0 {
+		return votes, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rows, err := p.db.QueryContext(ctx, query, userID, pq.Array(ids))
+	if err != nil {
+		return nil, fmt.Errorf("error al consultar votos: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var value int
+		if err := rows.Scan(&id, &value); err != nil {
+			return nil, err
+		}
+		votes[id] = value
+	}
+	return votes, nil
+}
 
 func (p *PostgresRepository) VotePost(userID, postID string, voteValue int) (*models.VoteResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

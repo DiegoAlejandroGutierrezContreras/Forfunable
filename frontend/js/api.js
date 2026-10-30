@@ -437,6 +437,42 @@ window.api = new ApiClient();
 
 // Utilidades Globales de Sanitización XSS y UI
 window.utils = {
+  // Voto único por usuario: la misma flecha otra vez retira el voto y la contraria lo cambia.
+  // El marcador se toma de la respuesta del servidor, no se suma en el cliente.
+  async castVote(kind, id, clicked) {
+    if (!window.api.user) {
+      Router.navigate('/login');
+      window.utils.showToast('Inicia sesión para votar', 'info');
+      return;
+    }
+    const box = document.querySelector(`[data-vote-box="${kind}:${id}"]`);
+    if (!box || box.dataset.busy === '1') return;
+    const current = Number(box.dataset.userVote || 0);
+    const next = current === clicked ? 0 : clicked;
+
+    box.dataset.busy = '1';
+    try {
+      const res = kind === 'post'
+        ? await window.api.votePost(id, next)
+        : await window.api.voteComment(id, next);
+      window.utils.paintVote(box, res.current_vote, res.new_score);
+    } catch (err) {
+      window.utils.showToast(err.message || 'No se pudo registrar el voto', 'error');
+    } finally {
+      box.dataset.busy = '';
+    }
+  },
+
+  paintVote(box, userVote, score) {
+    box.dataset.userVote = userVote;
+    box.querySelector('[data-vote-dir="1"]').classList.toggle('voted-up', userVote === 1);
+    box.querySelector('[data-vote-dir="-1"]').classList.toggle('voted-down', userVote === -1);
+    const scoreEl = box.querySelector('.vote-score');
+    scoreEl.textContent = score;
+    scoreEl.classList.toggle('voted-up', userVote === 1);
+    scoreEl.classList.toggle('voted-down', userVote === -1);
+  },
+
   // Sanitizador seguro contra inyecciones XSS
   escapeHTML(str) {
     if (!str) return '';

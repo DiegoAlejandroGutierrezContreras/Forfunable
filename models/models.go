@@ -98,6 +98,7 @@ type Post struct {
 	IsRemoved       bool      `json:"is_removed"`
 	HotRankingScore float64   `json:"hot_ranking_score,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
+	UserVote        int       `json:"user_vote"` // voto de quien consulta: 1, -1 o 0 (no se persiste)
 }
 
 // Comment representa un comentario jerárquico estructurado con ltree
@@ -113,6 +114,7 @@ type Comment struct {
 	Score           int       `json:"score"`
 	IsRemoved       bool      `json:"is_removed"`
 	CreatedAt       time.Time `json:"created_at"`
+	UserVote        int       `json:"user_vote"` // voto de quien consulta (no se persiste)
 }
 
 // PostVote representa un voto físico individual sobre un post

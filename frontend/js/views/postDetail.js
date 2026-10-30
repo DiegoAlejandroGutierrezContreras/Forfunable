@@ -75,12 +75,12 @@ window.PostDetailView = {
 
           <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-subtle); padding-top: var(--space-md);">
             <!-- Linear Pill de Votación -->
-            <div class="vote-pill" style="flex-direction: row; width: auto; gap: 8px; padding: 4px 12px;">
-              <button class="vote-btn ${this.currentPost.user_vote === 1 ? 'voted-up' : ''}" onclick="PostDetailView.votePost('${this.currentPost.id}', 1)">▲</button>
-              <span class="vote-score" id="detail-score-${this.currentPost.id}">
+            <div class="vote-pill" style="flex-direction: row; width: auto; gap: 8px; padding: 4px 12px;" data-vote-box="post:${this.currentPost.id}" data-user-vote="${this.currentPost.user_vote || 0}">
+              <button class="vote-btn ${this.currentPost.user_vote === 1 ? 'voted-up' : ''}" data-vote-dir="1" onclick="PostDetailView.votePost('${this.currentPost.id}', 1)">▲</button>
+              <span class="vote-score ${this.currentPost.user_vote === 1 ? 'voted-up' : this.currentPost.user_vote === -1 ? 'voted-down' : ''}" id="detail-score-${this.currentPost.id}">
                 ${this.currentPost.net_votes || this.currentPost.votes_count || 0}
               </span>
-              <button class="vote-btn ${this.currentPost.user_vote === -1 ? 'voted-down' : ''}" onclick="PostDetailView.votePost('${this.currentPost.id}', -1)">▼</button>
+              <button class="vote-btn ${this.currentPost.user_vote === -1 ? 'voted-down' : ''}" data-vote-dir="-1" onclick="PostDetailView.votePost('${this.currentPost.id}', -1)">▼</button>
             </div>
 
             <div style="display: flex; gap: 10px;">
@@ -160,10 +160,10 @@ window.PostDetailView = {
           ${!isDeleted ? `
             <div style="display: flex; align-items: center; gap: 12px; font-size: 12px;">
               <!-- Linear Pill Voto Comentario -->
-              <div style="display: flex; align-items: center; gap: 4px; background: var(--surface-0); padding: 2px 8px; border-radius: 9999px; border: 1px solid var(--border-subtle);">
-                <button class="vote-btn" onclick="PostDetailView.voteComment('${c.id}', 1)">▲</button>
-                <span class="vote-score" id="score-comment-${c.id}">${c.net_votes || 0}</span>
-                <button class="vote-btn" onclick="PostDetailView.voteComment('${c.id}', -1)">▼</button>
+              <div style="display: flex; align-items: center; gap: 4px; background: var(--surface-0); padding: 2px 8px; border-radius: 9999px; border: 1px solid var(--border-subtle);" data-vote-box="comment:${c.id}" data-user-vote="${c.user_vote || 0}">
+                <button class="vote-btn ${c.user_vote === 1 ? 'voted-up' : ''}" data-vote-dir="1" onclick="PostDetailView.voteComment('${c.id}', 1)">▲</button>
+                <span class="vote-score ${c.user_vote === 1 ? 'voted-up' : c.user_vote === -1 ? 'voted-down' : ''}" id="score-comment-${c.id}">${c.net_votes || 0}</span>
+                <button class="vote-btn ${c.user_vote === -1 ? 'voted-down' : ''}" data-vote-dir="-1" onclick="PostDetailView.voteComment('${c.id}', -1)">▼</button>
               </div>
 
               <button class="btn btn-ghost" style="padding: 2px 6px; font-size: 12px;" onclick="PostDetailView.toggleReplyBox('${c.id}')">
@@ -236,29 +236,11 @@ window.PostDetailView = {
   },
 
   async votePost(postId, voteType) {
-    if (!window.api.user) {
-      Router.navigate('/login');
-      return;
-    }
-    const scoreEl = document.getElementById(`detail-score-${postId}`);
-    if (scoreEl) {
-      let currentScore = parseInt(scoreEl.textContent) || 0;
-      scoreEl.textContent = currentScore + voteType;
-    }
-    await window.api.votePost(postId, voteType);
+    await window.utils.castVote('post', postId, voteType);
   },
 
   async voteComment(commentId, voteType) {
-    if (!window.api.user) {
-      Router.navigate('/login');
-      return;
-    }
-    const scoreEl = document.getElementById(`score-comment-${commentId}`);
-    if (scoreEl) {
-      let currentScore = parseInt(scoreEl.textContent) || 0;
-      scoreEl.textContent = currentScore + voteType;
-    }
-    await window.api.voteComment(commentId, voteType);
+    await window.utils.castVote('comment', commentId, voteType);
   },
 
   // Denuncia: llega a la Cola de Moderación de la Consola Admin

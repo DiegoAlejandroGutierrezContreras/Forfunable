@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
+	"unicode"
 
 	"forfunable/config"
 	"forfunable/middleware"
@@ -28,6 +30,9 @@ func (h *AuthHandler) setRefreshCookie(c *gin.Context, value string, maxAge int)
 	c.SetCookie("refresh_token", value, maxAge, "/", "", h.cfg.IsProduction(), true)
 }
 
+// usernamePattern es la misma regla que valida el formulario de registro
+var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+
 // Register maneja POST /api/v1/auth/register (201 Created)
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req models.RegisterRequest
@@ -39,11 +44,20 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Validación de contraseña
-	if len(req.Password) < 8 {
+	if !usernamePattern.MatchString(req.Username) {
 		c.JSON(http.StatusUnprocessableEntity, models.ErrorResponse{
 			Error:   "UNPROCESSABLE_ENTITY",
-			Message: "La contraseña debe tener un mínimo de 8 caracteres",
+			Message: "El nombre de usuario solo admite letras, números y guion bajo (_), sin espacios",
+		})
+		return
+	}
+
+	// Validación de contraseña (misma regla que muestra el formulario de registro)
+	if len(req.Password) < 8 || !strings.ContainsAny(req.Password, "0123456789") ||
+		!strings.ContainsFunc(req.Password, unicode.IsLetter) {
+		c.JSON(http.StatusUnprocessableEntity, models.ErrorResponse{
+			Error:   "UNPROCESSABLE_ENTITY",
+			Message: "La contraseña debe tener al menos 8 caracteres, una letra y un número",
 		})
 		return
 	}

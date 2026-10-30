@@ -280,6 +280,54 @@ code, pre {
   color: var(--text-muted);
 }
 
+/* Validación en vivo de formularios */
+.form-input.is-invalid, .form-input.is-invalid:focus {
+  border-color: var(--error);
+  box-shadow: 0 0 0 2px var(--error-tint);
+}
+
+.form-input.is-valid {
+  border-color: var(--primary);
+}
+
+.field-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--error);
+}
+
+.field-hint:empty {
+  display: none;
+}
+
+.password-rules {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.password-rules li.ok { color: var(--primary); }
+.password-rules li.missing { color: var(--error); }
+
+/* Página de acceso a pantalla completa: sin barra superior ni columnas laterales */
+body.auth-mode .top-navbar,
+body.auth-mode .app-sidebar-left,
+body.auth-mode .app-sidebar-right {
+  display: none;
+}
+
+body.auth-mode .app-container {
+  grid-template-columns: minmax(0, 440px);
+  justify-content: center;
+  align-content: center;
+  min-height: 100vh;
+}
+
 /* Widget de Votación (Linear Pill) */
 .vote-pill {
   display: inline-flex;

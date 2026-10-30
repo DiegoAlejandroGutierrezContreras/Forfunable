@@ -175,6 +175,8 @@ func (h *ExtraHandler) RecommendationsFeed(c *gin.Context) {
 		return
 	}
 
+	attachPostVotes(h.repo, c.GetString("user_id"), posts...)
+
 	c.JSON(http.StatusOK, gin.H{
 		"algorithm":   "Hot Ranking Decay (G=1.8)",
 		"items":       posts,

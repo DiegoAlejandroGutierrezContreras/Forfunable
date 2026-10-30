@@ -854,6 +854,30 @@ func (m *MemoryRepository) DeleteComment(id string) error {
 }
 
 // --- Votación (Write-behind en memoria) ---
+func (m *MemoryRepository) GetUserPostVotes(userID string, postIDs []string) (map[string]int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	votes := map[string]int{}
+	for _, id := range postIDs {
+		if v, ok := m.postVotes[fmt.Sprintf("%s:%s", userID, id)]; ok && v != 0 {
+			votes[id] = v
+		}
+	}
+	return votes, nil
+}
+
+func (m *MemoryRepository) GetUserCommentVotes(userID string, commentIDs []string) (map[string]int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	votes := map[string]int{}
+	for _, id := range commentIDs {
+		if v, ok := m.commentVotes[fmt.Sprintf("%s:%s", userID, id)]; ok && v != 0 {
+			votes[id] = v
+		}
+	}
+	return votes, nil
+}
+
 func (m *MemoryRepository) VotePost(userID, postID string, voteValue int) (*models.VoteResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

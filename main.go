@@ -158,9 +158,10 @@ func main() {
 		// Módulo 1.3: Publicaciones y Archivos Multimedia
 		posts := v1.Group("/posts")
 		{
-			posts.GET("", postHandler.ListPosts)
-			posts.GET("/:id", postHandler.GetPostDetail)
-			posts.GET("/:id/comments", commentHandler.ListComments)
+			// OptionalAuth: si hay sesión, cada post/comentario incluye user_vote
+			posts.GET("", middleware.OptionalAuth(cfg.JWTSecret), postHandler.ListPosts)
+			posts.GET("/:id", middleware.OptionalAuth(cfg.JWTSecret), postHandler.GetPostDetail)
+			posts.GET("/:id/comments", middleware.OptionalAuth(cfg.JWTSecret), commentHandler.ListComments)
 
 			postsAuth := posts.Group("")
 			postsAuth.Use(middleware.AuthRequired(cfg.JWTSecret))

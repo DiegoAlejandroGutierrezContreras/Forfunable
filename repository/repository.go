@@ -47,6 +47,8 @@ type Repository interface {
 	DeleteComment(id string) error
 
 	// Votación y Karma
+	GetUserPostVotes(userID string, postIDs []string) (map[string]int, error)
+	GetUserCommentVotes(userID string, commentIDs []string) (map[string]int, error)
 	VotePost(userID, postID string, voteValue int) (*models.VoteResponse, error)
 	VoteComment(userID, commentID string, voteValue int) (*models.VoteResponse, error)
 	GetUserKarmaDetail(userID string) (*models.KarmaDetailResponse, error)
