@@ -15,6 +15,7 @@ type Repository interface {
 	UpdateUserStatus(id, status string) error
 	VerifyUserAge(id string) error
 	ListUsers(search, role, status string, page, limit int) ([]*models.User, int, error)
+	ListMembers(search, sort string, limit int) ([]*models.User, error)
 	UpdateUserRole(id, role string) error
 	UpdateUserGlobalStatus(id string, isActive bool, freezeReason string) error
 
@@ -34,7 +35,7 @@ type Repository interface {
 	// Publicaciones
 	CreatePost(post *models.Post) error
 	GetPostByID(id string) (*models.Post, error)
-	ListPosts(communityID, sort string, page, limit int) ([]*models.Post, int, error)
+	ListPosts(communityID, authorID, sort string, page, limit int) ([]*models.Post, int, error)
 	UpdatePost(id, bodyText string) (*models.Post, error)
 	DeletePost(id string) error
 	RemovePostByAdmin(id string) error
@@ -83,10 +84,13 @@ type Repository interface {
 	BanUser(ban *models.CommunityBan) error
 	UnbanUser(userID, communityID, reason string) error
 	IsUserBannedFromCommunity(userID, communityID string) (bool, error)
+	ListCommunityBans(communityID string) ([]*models.CommunityBan, error)
 	CreateModerationLog(log *models.ModerationLog) error
 	ListModerationLogs(moderatorID, actionType, fromDate, toDate string) ([]*models.ModerationLog, error)
 	CreateCommunityNote(note *models.CommunityNote) error
 	VoteCommunityNote(noteID, userID string, isHelpful bool) error
+	ListCommunityNotes(postID, userID string) ([]*models.CommunityNote, error)
+	RecalculateRankingCounters(communityID string) (postsFixed, commentsFixed int, err error)
 	GetAnalyticsMetrics(timeframe string) (map[string]interface{}, error)
 	GetSecurityAccountGroups(riskThreshold float64) ([]map[string]interface{}, error)
 	SearchPredictive(query string) ([]map[string]interface{}, error)

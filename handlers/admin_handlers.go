@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"forfunable/middleware"
 	"forfunable/models"
 	"forfunable/repository"
 	"github.com/gin-gonic/gin"
@@ -127,6 +128,14 @@ func (h *AdminHandler) UpdateCommunitySettings(c *gin.Context) {
 		})
 		return
 	}
+
+	_ = h.repo.CreateModerationLog(&models.ModerationLog{
+		ModeratorID: callerID,
+		CommunityID: &commID,
+		ActionType:  "UPDATE_COMMUNITY_SETTINGS",
+		TargetID:    commID,
+		Reason:      fmt.Sprintf("Ajustes de c/%s: privada=%t, +18=%t", comm.Name, req.IsPrivate, req.AgeRestricted),
+	})
 
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,
@@ -320,12 +329,24 @@ func (h *AdminHandler) UnbanUser(c *gin.Context) {
 func (h *AdminHandler) AdminRemoveContent(c *gin.Context) {
 	callerID := c.GetString("user_id")
 	targetID := c.Param("id")
+	// Justificación opcional (?reason=...) que se registra y se comunica al autor
+	reason := strings.TrimSpace(c.Query("reason"))
+	if reason == "" {
+		reason = "Retirado forzosamente por moderación administrativa"
+	}
+	reason = middleware.SanitizeText(reason)
 
-	// Intentar borrar como post primero, luego como comentario
-	errPost := h.repo.RemovePostByAdmin(targetID)
-	errComment := h.repo.DeleteComment(targetID)
-
-	if errPost != nil && errComment != nil {
+	var authorID, kind, link string
+	if post, err := h.repo.GetPostByID(targetID); err == nil {
+		if err := h.repo.RemovePostByAdmin(post.ID); err == nil {
+			authorID, kind, link = post.AuthorID, "POST", notifAccount
+		}
+	} else if cm, err := h.repo.GetCommentByID(targetID); err == nil {
+		if err := h.repo.DeleteComment(cm.ID); err == nil {
+			authorID, kind, link = cm.UserID, "COMMENT", notifPost(cm.PostID)
+		}
+	}
+	if kind == "" {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{
 			Error:   "NOT_FOUND",
 			Message: "Contenido no encontrado",
@@ -337,13 +358,28 @@ func (h *AdminHandler) AdminRemoveContent(c *gin.Context) {
 		ModeratorID: callerID,
 		ActionType:  "REMOVE_CONTENT_FORCE",
 		TargetID:    targetID,
-		Reason:      "Retirado forzosamente por moderación administrativa",
+		Reason:      kind + " retirado: " + reason,
 	})
+	what := map[string]string{"POST": "Tu publicación", "COMMENT": "Tu comentario"}[kind]
+	notify(h.repo, authorID, callerID, "Contenido retirado", what+" fue retirado por moderación. Motivo: "+reason, link)
 
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,
 		Message: "Contenido retirado por acción de moderación forzada",
 	})
+}
+
+// ListCommunityBans maneja GET /api/v1/admin/communities/:id/bans (200 OK)
+func (h *AdminHandler) ListCommunityBans(c *gin.Context) {
+	bans, err := h.repo.ListCommunityBans(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: "Error al listar sanciones",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": bans, "count": len(bans)})
 }
 
 // ListUsers maneja GET /api/v1/admin/users (200 OK)
@@ -515,14 +551,34 @@ func (h *AdminHandler) GetSecurityAccountGroups(c *gin.Context) {
 func (h *AdminHandler) ReindexRecommendations(c *gin.Context) {
 	var req models.ReindexRequest
 	_ = c.ShouldBindJSON(&req)
+	communityID := strings.TrimSpace(req.CommunityID)
 
-	target := "global"
-	if strings.TrimSpace(req.CommunityID) != "" {
-		target = req.CommunityID
+	start := time.Now()
+	postsFixed, commentsFixed, err := h.repo.RecalculateRankingCounters(communityID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: err.Error(),
+		})
+		return
 	}
+	target := "global"
+	if communityID != "" {
+		target = communityID
+	}
+	_ = h.repo.CreateModerationLog(&models.ModerationLog{
+		ModeratorID: c.GetString("user_id"),
+		ActionType:  "REINDEX_RANKING",
+		TargetID:    c.GetString("user_id"),
+		Reason:      fmt.Sprintf("Recalculo %s: %d publicaciones y %d comentarios corregidos", target, postsFixed, commentsFixed),
+	})
 
-	c.JSON(http.StatusAccepted, models.StandardResponse{
-		Success: true,
-		Message: fmt.Sprintf("Pipeline asíncrono en Vertex AI Search and Conversation disparado para objetivo: %s", target),
+	c.JSON(http.StatusAccepted, gin.H{
+		"success":        true,
+		"message":        fmt.Sprintf("Contadores del ranking recalculados (%s)", target),
+		"target":         target,
+		"posts_fixed":    postsFixed,
+		"comments_fixed": commentsFixed,
+		"duration_ms":    time.Since(start).Milliseconds(),
 	})
 }

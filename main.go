@@ -137,6 +137,7 @@ func main() {
 				usersAuth.POST("/me/verify-age", authHandler.VerifyAge)
 				usersAuth.POST("/block", chatHandler.BlockUser)
 			}
+			users.GET("", authHandler.ListMembers)
 			users.GET("/:id/karma", voteHandler.GetUserKarma)
 			users.GET("/:id", authHandler.GetPublicProfile)
 		}
@@ -222,10 +223,11 @@ func main() {
 		}
 
 		commNotes := v1.Group("/community-notes")
-		commNotes.Use(middleware.AuthRequired(cfg.JWTSecret))
 		{
-			commNotes.POST("", extraHandler.CreateCommunityNote)
-			commNotes.POST("/:id/vote", extraHandler.VoteCommunityNote)
+			// Lectura pública; con sesión incluye el voto propio (user_vote)
+			commNotes.GET("", middleware.OptionalAuth(cfg.JWTSecret), extraHandler.ListCommunityNotes)
+			commNotes.POST("", middleware.AuthRequired(cfg.JWTSecret), extraHandler.CreateCommunityNote)
+			commNotes.POST("/:id/vote", middleware.AuthRequired(cfg.JWTSecret), extraHandler.VoteCommunityNote)
 		}
 
 		v1.GET("/search/predictive", extraHandler.SearchPredictive)
@@ -240,6 +242,7 @@ func main() {
 		{
 			admin.POST("/communities/:id/moderators", adminHandler.AssignModerator)
 			admin.PUT("/communities/:id/settings", adminHandler.UpdateCommunitySettings)
+			admin.GET("/communities/:id/bans", adminHandler.ListCommunityBans)
 			admin.GET("/moderation/reports", adminHandler.ListModerationReports)
 			admin.PATCH("/moderation/reports/:id", adminHandler.ResolveReport)
 			admin.POST("/moderation/actions/ban", adminHandler.BanUser)

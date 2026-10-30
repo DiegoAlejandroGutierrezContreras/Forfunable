@@ -230,6 +230,58 @@ func (p *PostgresRepository) VerifyUserAge(id string) error {
 	return err
 }
 
+// ListMembers alimenta el directorio público de miembros (solo cuentas activas).
+func (p *PostgresRepository) ListMembers(search, sort string, limit int) ([]*models.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	orderBy := "karma_score DESC, created_at ASC"
+	if sort == "newest" {
+		orderBy = "created_at DESC"
+	}
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT id, username, global_role, COALESCE(avatar_url,''), COALESCE(bio,''), presence_status, karma_score, created_at
+		 FROM users
+		 WHERE is_active = TRUE AND ($1 = '' OR username ILIKE '%' || $1 || '%')
+		 ORDER BY `+orderBy+` LIMIT $2`, search, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error al listar miembros: %w", err)
+	}
+	defer rows.Close()
+	var users []*models.User
+	for rows.Next() {
+		u := &models.User{}
+		if err := rows.Scan(&u.ID, &u.Username, &u.GlobalRole, &u.AvatarURL, &u.Bio, &u.PresenceStatus, &u.KarmaScore, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+// ListCommunityBans devuelve las sanciones vigentes de una comunidad con el nombre del usuario.
+func (p *PostgresRepository) ListCommunityBans(communityID string) ([]*models.CommunityBan, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT b.user_id, COALESCE(u.username, ''), b.community_id, b.reason, b.expires_at, b.created_at
+		 FROM community_bans b LEFT JOIN users u ON u.id = b.user_id
+		 WHERE b.community_id = $1 AND (b.expires_at IS NULL OR b.expires_at > NOW())
+		 ORDER BY b.created_at DESC`, communityID)
+	if err != nil {
+		return nil, fmt.Errorf("error al listar sanciones: %w", err)
+	}
+	defer rows.Close()
+	var bans []*models.CommunityBan
+	for rows.Next() {
+		b := &models.CommunityBan{}
+		if err := rows.Scan(&b.UserID, &b.Username, &b.CommunityID, &b.Reason, &b.ExpiresAt, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		bans = append(bans, b)
+	}
+	return bans, nil
+}
+
 func (p *PostgresRepository) ListUsers(search, role, status string, page, limit int) ([]*models.User, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -397,7 +449,10 @@ func (p *PostgresRepository) AssignCommunityModerator(mod *models.CommunityModer
 func (p *PostgresRepository) GetCommunityModerators(commID string) ([]models.CommunityModerator, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	rows, err := p.db.QueryContext(ctx, `SELECT community_id, user_id, mod_role, assigned_at FROM community_moderators WHERE community_id = $1`, commID)
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT m.community_id, m.user_id, COALESCE(u.username, ''), m.mod_role, m.assigned_at
+		 FROM community_moderators m LEFT JOIN users u ON u.id = m.user_id
+		 WHERE m.community_id = $1 ORDER BY m.assigned_at`, commID)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +461,7 @@ func (p *PostgresRepository) GetCommunityModerators(commID string) ([]models.Com
 	var mods []models.CommunityModerator
 	for rows.Next() {
 		m := models.CommunityModerator{}
-		if err := rows.Scan(&m.CommunityID, &m.UserID, &m.ModRole, &m.AssignedAt); err != nil {
+		if err := rows.Scan(&m.CommunityID, &m.UserID, &m.Username, &m.ModRole, &m.AssignedAt); err != nil {
 			return nil, err
 		}
 		mods = append(mods, m)
@@ -479,7 +534,7 @@ func (p *PostgresRepository) GetPostByID(id string) (*models.Post, error) {
 	return post, nil
 }
 
-func (p *PostgresRepository) ListPosts(communityID, sort string, page, limit int) ([]*models.Post, int, error) {
+func (p *PostgresRepository) ListPosts(communityID, authorID, sort string, page, limit int) ([]*models.Post, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	offset := (page - 1) * limit
@@ -497,9 +552,9 @@ func (p *PostgresRepository) ListPosts(communityID, sort string, page, limit int
 		p.upvotes_count, p.downvotes_count, p.comments_count, p.is_removed, p.created_at
 		FROM posts p JOIN users u ON p.author_id = u.id
 		JOIN communities cm ON p.community_id = cm.id
-		WHERE p.is_removed = FALSE AND ($1 = '' OR p.community_id::text = $1)
+		WHERE p.is_removed = FALSE AND ($1 = '' OR p.community_id::text = $1) AND ($4 = '' OR p.author_id::text = $4)
 		ORDER BY ` + orderBy + ` LIMIT $2 OFFSET $3`
-	rows, err := p.db.QueryContext(ctx, query, communityID, limit, offset)
+	rows, err := p.db.QueryContext(ctx, query, communityID, limit, offset, authorID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("error al listar publicaciones: %w", err)
 	}
@@ -517,7 +572,7 @@ func (p *PostgresRepository) ListPosts(communityID, sort string, page, limit int
 	}
 
 	var count int
-	_ = p.db.QueryRowContext(ctx, `SELECT count(*) FROM posts WHERE is_removed = FALSE AND ($1 = '' OR community_id::text = $1)`, communityID).Scan(&count)
+	_ = p.db.QueryRowContext(ctx, `SELECT count(*) FROM posts WHERE is_removed = FALSE AND ($1 = '' OR community_id::text = $1) AND ($2 = '' OR author_id::text = $2)`, communityID, authorID).Scan(&count)
 	return posts, count, nil
 }
 
@@ -1328,6 +1383,72 @@ func (p *PostgresRepository) CreateCommunityNote(note *models.CommunityNote) err
 		`INSERT INTO community_notes (id, post_id, author_id, note_text, proof_url) VALUES ($1, $2, $3, $4, $5)`,
 		note.ID, note.PostID, note.AuthorID, note.NoteText, note.ProofURL)
 	return err
+}
+
+// RecalculateRankingCounters recalcula desde las tablas de votos y comentarios los contadores
+// que usa el Hot Ranking (upvotes/downvotes/comments de posts y score de comentarios).
+// Devuelve cuántas filas tenían valores desfasados.
+func (p *PostgresRepository) RecalculateRankingCounters(communityID string) (int, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, err := p.db.ExecContext(ctx, `
+		UPDATE posts p SET
+		  upvotes_count = s.up, downvotes_count = s.down, comments_count = s.cc
+		FROM (
+		  SELECT po.id,
+		    (SELECT count(*) FROM post_votes v WHERE v.post_id = po.id AND v.vote_value = 1) AS up,
+		    (SELECT count(*) FROM post_votes v WHERE v.post_id = po.id AND v.vote_value = -1) AS down,
+		    (SELECT count(*) FROM comments c WHERE c.post_id = po.id AND c.is_removed = FALSE) AS cc
+		  FROM posts po WHERE ($1 = '' OR po.community_id::text = $1)
+		) s
+		WHERE p.id = s.id AND (p.upvotes_count, p.downvotes_count, p.comments_count) IS DISTINCT FROM (s.up, s.down, s.cc)`, communityID)
+	if err != nil {
+		return 0, 0, fmt.Errorf("error al recalcular publicaciones: %w", err)
+	}
+	postsFixed, _ := res.RowsAffected()
+	res, err = p.db.ExecContext(ctx, `
+		UPDATE comments c SET score = s.score
+		FROM (
+		  SELECT co.id, COALESCE((SELECT SUM(v.vote_value) FROM comment_votes v WHERE v.comment_id = co.id), 0) AS score
+		  FROM comments co JOIN posts po ON po.id = co.post_id
+		  WHERE ($1 = '' OR po.community_id::text = $1)
+		) s
+		WHERE c.id = s.id AND c.score IS DISTINCT FROM s.score`, communityID)
+	if err != nil {
+		return int(postsFixed), 0, fmt.Errorf("error al recalcular comentarios: %w", err)
+	}
+	commentsFixed, _ := res.RowsAffected()
+	return int(postsFixed), int(commentsFixed), nil
+}
+
+// ListCommunityNotes devuelve las notas de un post con votos contados desde community_note_votes.
+func (p *PostgresRepository) ListCommunityNotes(postID, userID string) ([]*models.CommunityNote, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT n.id, n.post_id, n.author_id, COALESCE(u.username, ''), n.note_text, COALESCE(n.proof_url, ''),
+		        (SELECT count(*) FROM community_note_votes v WHERE v.note_id = n.id AND v.is_helpful),
+		        (SELECT count(*) FROM community_note_votes v WHERE v.note_id = n.id AND NOT v.is_helpful),
+		        COALESCE((SELECT CASE WHEN v.is_helpful THEN 1 ELSE -1 END FROM community_note_votes v
+		                  WHERE v.note_id = n.id AND v.user_id::text = $2), 0),
+		        n.created_at
+		 FROM community_notes n LEFT JOIN users u ON u.id = n.author_id
+		 WHERE n.post_id = $1
+		 ORDER BY n.created_at`, postID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error al listar notas comunitarias: %w", err)
+	}
+	defer rows.Close()
+	var notes []*models.CommunityNote
+	for rows.Next() {
+		n := &models.CommunityNote{}
+		if err := rows.Scan(&n.ID, &n.PostID, &n.AuthorID, &n.AuthorUsername, &n.NoteText, &n.ProofURL,
+			&n.HelpfulVotes, &n.UnhelpfulVotes, &n.UserVote, &n.CreatedAt); err != nil {
+			return nil, err
+		}
+		notes = append(notes, n)
+	}
+	return notes, nil
 }
 
 func (p *PostgresRepository) VoteCommunityNote(noteID, userID string, isHelpful bool) error {

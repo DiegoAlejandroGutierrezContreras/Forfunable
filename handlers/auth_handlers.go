@@ -5,6 +5,7 @@ import (
 	"net/mail"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -443,6 +444,36 @@ func (h *AuthHandler) VerifyAge(c *gin.Context) {
 		Verified: true,
 		Message:  "Mayoría de edad validada exitosamente mediante IDP",
 	})
+}
+
+// ListMembers maneja GET /api/v1/users (200 OK): directorio público y ranking de reputación
+func (h *AuthHandler) ListMembers(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if limit < 1 || limit > 100 {
+		limit = 50
+	}
+	users, err := h.repo.ListMembers(strings.TrimSpace(c.Query("search")), c.DefaultQuery("sort", "karma"), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: "Error al listar miembros",
+		})
+		return
+	}
+	items := make([]gin.H, 0, len(users))
+	for _, u := range users {
+		items = append(items, gin.H{
+			"id":              u.ID,
+			"username":        u.Username,
+			"global_role":     u.GlobalRole,
+			"avatar_url":      u.AvatarURL,
+			"bio":             u.Bio,
+			"presence_status": u.PresenceStatus,
+			"karma_score":     u.KarmaScore,
+			"created_at":      u.CreatedAt,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "count": len(items)})
 }
 
 // GetPublicProfile maneja GET /api/v1/users/:id (200 OK)

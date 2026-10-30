@@ -657,7 +657,7 @@ func (m *MemoryRepository) GetPostByID(id string) (*models.Post, error) {
 	return p, nil
 }
 
-func (m *MemoryRepository) ListPosts(communityID, sortType string, page, limit int) ([]*models.Post, int, error) {
+func (m *MemoryRepository) ListPosts(communityID, authorID, sortType string, page, limit int) ([]*models.Post, int, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -667,6 +667,9 @@ func (m *MemoryRepository) ListPosts(communityID, sortType string, page, limit i
 			continue
 		}
 		if communityID != "" && p.CommunityID != communityID {
+			continue
+		}
+		if authorID != "" && p.AuthorID != authorID {
 			continue
 		}
 		result = append(result, p)
@@ -1368,6 +1371,48 @@ func (m *MemoryRepository) UnbanUser(userID, communityID, reason string) error {
 	return nil
 }
 
+func (m *MemoryRepository) ListMembers(search, sort string, limit int) ([]*models.User, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var users []*models.User
+	for _, u := range m.users {
+		if u.IsActive && (search == "" || strings.Contains(strings.ToLower(u.Username), strings.ToLower(search))) {
+			users = append(users, u)
+		}
+	}
+	sortUsers := func(i, j int) bool {
+		if sort == "newest" {
+			return users[i].CreatedAt.After(users[j].CreatedAt)
+		}
+		return users[i].KarmaScore > users[j].KarmaScore
+	}
+	for i := 1; i < len(users); i++ {
+		for j := i; j > 0 && sortUsers(j, j-1); j-- {
+			users[j], users[j-1] = users[j-1], users[j]
+		}
+	}
+	if len(users) > limit {
+		users = users[:limit]
+	}
+	return users, nil
+}
+
+func (m *MemoryRepository) ListCommunityBans(communityID string) ([]*models.CommunityBan, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var bans []*models.CommunityBan
+	for _, b := range m.communityBans[communityID] {
+		if b.ExpiresAt == nil || time.Now().Before(*b.ExpiresAt) {
+			cp := *b
+			if u, ok := m.users[b.UserID]; ok {
+				cp.Username = u.Username
+			}
+			bans = append(bans, &cp)
+		}
+	}
+	return bans, nil
+}
+
 func (m *MemoryRepository) IsUserBannedFromCommunity(userID, communityID string) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -1430,6 +1475,26 @@ func (m *MemoryRepository) CreateCommunityNote(note *models.CommunityNote) error
 	note.CreatedAt = time.Now()
 	m.communityNotes[note.ID] = note
 	return nil
+}
+
+func (m *MemoryRepository) RecalculateRankingCounters(communityID string) (int, int, error) {
+	return 0, 0, nil
+}
+
+func (m *MemoryRepository) ListCommunityNotes(postID, userID string) ([]*models.CommunityNote, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var notes []*models.CommunityNote
+	for _, n := range m.communityNotes {
+		if n.PostID == postID {
+			cp := *n
+			if u, ok := m.users[n.AuthorID]; ok {
+				cp.AuthorUsername = u.Username
+			}
+			notes = append(notes, &cp)
+		}
+	}
+	return notes, nil
 }
 
 func (m *MemoryRepository) VoteCommunityNote(noteID, userID string, isHelpful bool) error {

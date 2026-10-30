@@ -99,6 +99,11 @@ func (h *ExtraHandler) CreateCommunityNote(c *gin.Context) {
 		return
 	}
 
+	if post, err := h.repo.GetPostByID(note.PostID); err == nil {
+		notify(h.repo, post.AuthorID, userID, "Nota comunitaria",
+			"u/"+c.GetString("username")+" propuso una nota de contexto en «"+post.Title+"»", notifPost(post.ID))
+	}
+
 	c.JSON(http.StatusCreated, note)
 }
 
@@ -154,6 +159,27 @@ func (h *ExtraHandler) SearchPredictive(c *gin.Context) {
 		"query": q,
 		"hits":  hits,
 	})
+}
+
+// ListCommunityNotes maneja GET /api/v1/community-notes?post_id= (200 OK)
+func (h *ExtraHandler) ListCommunityNotes(c *gin.Context) {
+	postID := c.Query("post_id")
+	if postID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error:   "BAD_REQUEST",
+			Message: "post_id es obligatorio",
+		})
+		return
+	}
+	notes, err := h.repo.ListCommunityNotes(postID, c.GetString("user_id"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: "Error al listar notas comunitarias",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": notes, "count": len(notes)})
 }
 
 // RecommendationsFeed maneja GET /api/v1/recommendations/feed (200 OK)

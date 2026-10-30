@@ -76,6 +76,7 @@ type CommunityMember struct {
 type CommunityModerator struct {
 	CommunityID string                 `json:"community_id"`
 	UserID      string                 `json:"user_id"`
+	Username    string                 `json:"username,omitempty"`
 	ModRole     string                 `json:"mod_role"`
 	Permissions map[string]interface{} `json:"permissions"`
 	AssignedAt  time.Time              `json:"assigned_at"`
@@ -176,6 +177,7 @@ type UserBlock struct {
 // CommunityBan representa una sanción o expulsión de comunidad
 type CommunityBan struct {
 	UserID      string     `json:"user_id"`
+	Username    string     `json:"username,omitempty"`
 	CommunityID string     `json:"community_id"`
 	Reason      string     `json:"reason"`
 	ExpiresAt   *time.Time `json:"expires_at"`
@@ -242,6 +244,8 @@ type CommunityNote struct {
 	HelpfulVotes   int       `json:"helpful_votes"`
 	UnhelpfulVotes int       `json:"unhelpful_votes"`
 	CreatedAt      time.Time `json:"created_at"`
+	AuthorUsername string    `json:"author_username,omitempty"`
+	UserVote       int       `json:"user_vote"` // voto de quien consulta: 1 útil, -1 no útil, 0 sin votar
 }
 
 // CommunityNoteVote voto sobre utilidad de nota

@@ -48,7 +48,7 @@ func (h *PostHandler) ListPosts(c *gin.Context) {
 		limit = 20
 	}
 
-	posts, total, err := h.repo.ListPosts(communityID, sortType, page, limit)
+	posts, total, err := h.repo.ListPosts(communityID, c.Query("author_id"), sortType, page, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
