@@ -1,0 +1,130 @@
+/* Fuente de estilos: compilar con `npm run build:css` (genera css/app.css) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { color-scheme: dark; }
+  body {
+    @apply bg-surface-base font-body text-body-md text-ink antialiased;
+    overscroll-behavior: none;
+  }
+  h1, h2, h3, h4 { @apply font-display text-ink; }
+  a { @apply transition-colors; }
+  ::selection { background: rgba(0, 230, 118, 0.25); }
+  :focus-visible { outline: 1px solid #00e676; outline-offset: 2px; }
+  * { scrollbar-width: thin; scrollbar-color: #221c33 transparent; }
+}
+
+@layer components {
+  /* Iconos Material Symbols */
+  .icon {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 20px;
+    user-select: none;
+  }
+  .icon-fill { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+  /* Botones (design.md › Buttons) */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded px-3.5 py-2 text-label-lg font-semibold transition-all duration-150 select-none disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn:active:not(:disabled) { transform: scale(0.98); }
+  .btn-primary { @apply btn bg-primary text-primary-ink hover:bg-primary-hover; }
+  .btn-secondary { @apply btn border border-line bg-surface-elevated text-ink hover:border-line-strong; }
+  .btn-ghost { @apply btn text-ink-secondary hover:bg-white/[0.04] hover:text-ink; }
+  .btn-danger { @apply btn bg-danger text-white hover:bg-danger/90; }
+  .btn-danger-ghost { @apply btn text-danger hover:bg-danger/10; }
+  .btn-sm { @apply px-2.5 py-1.5 text-label-md; }
+  .btn-icon { @apply btn p-2 text-ink-secondary hover:bg-white/[0.04] hover:text-ink; }
+
+  /* Superficies (design.md › Elevation) */
+  .card { @apply rounded-lg border border-line bg-surface-card p-4; }
+  .card-hover { @apply transition-colors hover:border-white/[0.14]; }
+  .panel { @apply rounded-lg border border-line bg-surface-elevated p-4 shadow-pop; }
+
+  /* Formularios */
+  .label { @apply mb-1.5 block text-label-md text-ink-secondary; }
+  .input {
+    @apply w-full rounded border border-line bg-surface-base px-3.5 py-2.5 text-body-md text-ink placeholder:text-ink-muted outline-none transition-colors focus:border-primary;
+  }
+  .input.is-invalid { @apply border-danger focus:border-danger; }
+  .input.is-valid { @apply border-primary/60; }
+  .field-hint { @apply mt-1.5 flex items-start gap-1.5 text-body-sm text-danger empty:hidden; }
+  .help { @apply mt-1.5 text-body-sm text-ink-muted; }
+  .switch { @apply relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full bg-surface-subtle transition-colors; }
+  .switch::after { content: ''; @apply absolute left-0.5 h-4 w-4 rounded-full bg-ink-secondary transition-transform duration-150; }
+  .switch.on { @apply bg-primary; }
+  .switch.on::after { @apply translate-x-4 bg-primary-ink; }
+
+  /* Chips y badges (design.md › Chips) */
+  .chip { @apply inline-flex items-center gap-1 rounded-chip px-2 py-0.5 text-label-sm whitespace-nowrap; }
+  .chip-community { @apply chip bg-secondary/10 text-secondary hover:bg-secondary/20; }
+  .chip-primary { @apply chip bg-primary/10 text-primary; }
+  .chip-tertiary { @apply chip bg-tertiary/15 text-tertiary-soft; }
+  .chip-danger { @apply chip bg-danger/10 text-danger; }
+  .chip-warning { @apply chip bg-warning/10 text-warning; }
+  .chip-neutral { @apply chip bg-surface-subtle text-ink-secondary; }
+
+  /* Votación (design.md › Voting Module) */
+  .vote-pill { @apply inline-flex items-center gap-1 rounded border border-line bg-surface-card px-1.5 py-1; }
+  .vote-btn { @apply flex h-7 w-7 items-center justify-center rounded text-ink-secondary transition-colors hover:bg-white/[0.04]; }
+  .vote-btn.voted-up { @apply text-primary; }
+  .vote-btn.voted-down { @apply text-danger; }
+  .vote-score { @apply min-w-[2ch] text-center text-label-lg font-semibold text-ink-secondary; }
+  .vote-score.voted-up { @apply text-primary; }
+  .vote-score.voted-down { @apply text-danger; }
+
+  /* Navegación lateral */
+  .nav-item { @apply flex items-center gap-3 rounded border-l-2 border-transparent px-3 py-2 text-body-md text-ink-secondary transition-colors hover:bg-surface-subtle hover:text-ink; }
+  .nav-item.active { @apply border-primary bg-surface-elevated font-semibold text-primary; }
+  .nav-section { @apply px-2 text-label-sm uppercase tracking-wider text-ink-muted; }
+
+  /* Pestañas */
+  .tab { @apply relative flex items-center gap-1.5 rounded px-3.5 py-1.5 text-label-md text-ink-secondary transition-colors hover:bg-surface-subtle hover:text-ink; }
+  .tab.active { @apply bg-surface-elevated font-semibold text-primary; }
+
+  /* Estados de carga */
+  .skeleton { @apply animate-pulse rounded bg-surface-subtle; }
+
+  /* Contenido Markdown de publicaciones y comentarios */
+  .prose-post { @apply text-body-md text-ink/90 break-words; }
+  .prose-post p { @apply mb-3 last:mb-0; }
+  .prose-post code { @apply rounded bg-surface-base px-1.5 py-0.5 font-mono text-[13px] text-secondary-soft; }
+  .prose-post pre { @apply my-3 overflow-x-auto rounded-md border border-line bg-surface-base p-4; }
+  .prose-post pre code { @apply bg-transparent p-0 text-ink/90; }
+  .prose-post blockquote { @apply my-3 border-l-2 border-secondary/50 pl-3 text-ink-secondary; }
+  .prose-post a { @apply text-secondary underline; }
+
+  /* Modales (design.md › Level 3) */
+  .modal-backdrop { @apply fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-md; }
+  .modal { @apply w-full max-w-lg rounded-lg border border-line-strong bg-surface-card/95 p-6 shadow-pop; }
+
+  /* Avisos */
+  .toast { @apply flex items-start gap-2 rounded-md border border-line-strong bg-surface-elevated px-4 py-3 text-body-md text-ink shadow-pop transition-all duration-200; }
+
+  /* Tablas de administración */
+  .table { @apply w-full text-left text-body-sm; }
+  .table th { @apply border-b border-line bg-surface-elevated px-3 py-2 text-label-sm uppercase tracking-wider text-ink-muted; }
+  .table td { @apply border-b border-line px-3 py-2.5 align-middle; }
+  .table tr:last-child td { @apply border-b-0; }
+
+  /* Hilos de comentarios (design.md › Thread Connector Lines) */
+  .thread-line { @apply border-l border-white/[0.06] pl-4 transition-colors hover:border-secondary/40; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .scrollbar-none { scrollbar-width: none; }
+  .lite-mode img:not([data-keep]) { display: none !important; }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "forfunable-frontend",
+  "private": true,
+  "description": "Compila los estilos Tailwind (Obsidian Signal) en css/app.css. El resultado se versiona: el servidor Go no necesita Node.",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i css/input.css -o css/app.css --minify",
+    "watch:css": "tailwindcss -c tailwind.config.js -i css/input.css -o css/app.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

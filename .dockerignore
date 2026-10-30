@@ -12,3 +12,4 @@ tmp/
 .vscode/
 .idea/
 web/
+frontend/node_modules/

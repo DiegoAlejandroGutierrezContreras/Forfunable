@@ -89,6 +89,14 @@ Forfunable/
 
 ---
 
+## Frontend (Obsidian Signal)
+
+La interfaz está en `frontend/` (SPA en JavaScript sin framework, servida por el backend Go) y sigue el sistema de diseño **Obsidian Signal** (`DESIGN.md`). Los estilos se escriben con Tailwind en `frontend/css/input.css` y se versiona el resultado compilado `frontend/css/app.css`, así que el contenedor no necesita Node. Para regenerarlo tras cambiar clases:
+
+```bash
+cd frontend && npm install && npm run build:css
+```
+
 ## Ejecución Local con PostgreSQL
 
 La aplicación requiere PostgreSQL activo (localmente o en Cloud SQL):

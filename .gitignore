@@ -33,3 +33,6 @@ tmp/
 *.log
 # Configuración MCP local con API keys (Stitch)
 .agents/mcp_config.json
+
+# Dependencias del compilador de estilos (frontend/css/app.css se versiona ya compilado)
+frontend/node_modules/

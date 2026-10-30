@@ -1,13 +1,30 @@
 /**
- * Vista: Centro de Notificaciones (Pantalla Stitch 03-20)
- * Conectada a /api/v1/notifications
+ * 03_19 Centro de notificaciones y alertas de reputación, 03_20 Notificaciones agrupadas y filtrado avanzado.
+ * Conectada a /api/v1/notifications, /:id/read y /read-all.
+ * El tipo indica a dónde lleva cada aviso: post:<id>, c:<nombre>, chat, account.
  */
 
 window.NotificationsView = {
-  onlyUnread: false,
+  filter: 'all',
   notifs: [],
 
-  // El tipo indica a dónde lleva la notificación: post:<id>, c:<nombre>, chat, account
+  categories: [
+    { id: 'all', label: 'Todas', icon: 'inbox' },
+    { id: 'unread', label: 'No leídas', icon: 'mark_email_unread' },
+    { id: 'post', label: 'Comentarios', icon: 'forum' },
+    { id: 'chat', label: 'Mensajes', icon: 'chat' },
+    { id: 'community', label: 'Comunidades', icon: 'groups' },
+    { id: 'account', label: 'Moderación', icon: 'shield' }
+  ],
+
+  kind(n) {
+    const t = n.type || '';
+    if (t.startsWith('post:')) return 'post';
+    if (t.startsWith('c:')) return 'community';
+    if (t === 'chat') return 'chat';
+    return 'account';
+  },
+
   linkFor(type = '') {
     if (type.startsWith('post:')) return `/posts/${type.slice(5)}`;
     if (type.startsWith('c:')) return `/c/${type.slice(2)}`;
@@ -16,132 +33,158 @@ window.NotificationsView = {
     return null;
   },
 
-  iconFor(type = '') {
-    if (type.startsWith('post:')) return '💬';
-    if (type.startsWith('c:')) return '👥';
-    if (type === 'chat') return '✉️';
-    if (type === 'account') return '🛡️';
-    return '🔔';
+  style(n) {
+    return {
+      post: ['forum', 'bg-secondary/10 text-secondary'],
+      chat: ['chat', 'bg-primary/10 text-primary'],
+      community: ['group_add', 'bg-tertiary/15 text-tertiary-soft'],
+      account: [/retirad/i.test(n.title) ? 'gpp_bad' : 'shield', /retirad/i.test(n.title) ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning']
+    }[this.kind(n)];
   },
 
-  async render(container) {
-    if (!window.api.user) {
-      container.innerHTML = `
-        <div class="state-empty card">
-          <h3>Inicia Sesión</h3>
-          <p>Debes estar autenticado para revisar tus alertas y menciones.</p>
-          <button class="btn btn-primary" onclick="Router.navigate('/login')">Iniciar Sesión</button>
-        </div>
-      `;
-      return;
-    }
-
-    container.innerHTML = `
-      <div style="max-width: 760px; margin: 0 auto;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md); gap: 8px; flex-wrap: wrap;">
-          <h1>🔔 Centro de Notificaciones</h1>
-          <div style="display: flex; gap: 6px;">
-            <button class="btn btn-secondary" id="notif-filter-btn" style="font-size: 12px;" onclick="NotificationsView.toggleFilter()">Ver solo no leídas</button>
-            <button class="btn btn-primary" style="font-size: 12px;" onclick="NotificationsView.markAllAsRead()">✓ Marcar todas como leídas</button>
-          </div>
-        </div>
-
-        <div id="notifications-list">
-          <div class="skeleton-card">
-            <div class="skeleton skeleton-text" style="width: 50%;"></div>
-            <div class="skeleton skeleton-text" style="width: 80%;"></div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    await this.loadNotifications();
+  async render(query = {}) {
+    this.filter = query.filter || 'all';
+    $main().innerHTML = `
+      ${UI.pageHeader('Notificaciones', 'Respuestas, mensajes, comunidades y avisos de moderación.', `
+        <a href="/settings/notifications" data-link class="btn-secondary">${UI.icon('tune', 'text-[18px]')} Preferencias</a>
+        <button class="btn-primary" onclick="NotificationsView.markAllAsRead()">${UI.icon('done_all', 'text-[18px]')} Marcar todo como leído</button>`, 'notifications')}
+      <div id="notif-filters" class="mb-4"></div>
+      <div id="notifications-list">${UI.skeletonPosts(3)}</div>`;
+    await this.load();
   },
 
-  async loadNotifications() {
-    const listEl = document.getElementById('notifications-list');
+  async load() {
     try {
       this.notifs = await window.api.listNotifications();
-      const notifs = this.onlyUnread ? this.notifs.filter(n => !n.is_read) : this.notifs;
-      const filterBtn = document.getElementById('notif-filter-btn');
-      if (filterBtn) filterBtn.textContent = this.onlyUnread ? 'Ver todas' : 'Ver solo no leídas';
-
-      if (!notifs || notifs.length === 0) {
-        listEl.innerHTML = `
-          <div class="state-empty">
-            <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-            </svg>
-            <h3>Estás al día</h3>
-            <p>${this.onlyUnread ? 'No tienes notificaciones sin leer.' : 'Aquí verás comentarios y respuestas a tus publicaciones, solicitudes de chat, mensajes, nuevos miembros en tus comunidades y avisos de moderación.'}</p>
-          </div>
-        `;
-        return;
-      }
-
-      listEl.innerHTML = notifs.map(n => `
-        <div class="card" style="margin-bottom: 8px; display: flex; gap: 12px; align-items: center; cursor: ${this.linkFor(n.type) ? 'pointer' : 'default'}; border-left: 3px solid ${n.is_read ? 'transparent' : 'var(--primary)'}; opacity: ${n.is_read ? '0.7' : '1'};" onclick="NotificationsView.open('${n.id}')">
-          <div style="font-size: 20px;">${this.iconFor(n.type)}</div>
-          <div style="flex: 1; min-width: 0;">
-            <div style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 2px;">${window.utils.escapeHTML(n.title || 'Notificación')}</div>
-            <div style="font-size: 14px; color: var(--text-primary); margin-bottom: 4px;">
-              ${window.utils.escapeHTML(n.message || '')}
-            </div>
-            <div style="font-size: 12px; color: var(--text-muted);">
-              ${window.utils.formatTime(n.created_at)}
-            </div>
-          </div>
-
-          ${!n.is_read ? `
-            <button class="btn btn-ghost" style="font-size: 11px;" onclick="event.stopPropagation(); NotificationsView.markAsRead('${n.id}')">
-              Marcar leída
-            </button>
-          ` : ''}
-        </div>
-      `).join('');
-
+      this.paint();
+      this.paintRail();
     } catch (err) {
-      listEl.innerHTML = `
-        <div class="state-error">
-          <p>No se pudieron recuperar las notificaciones: ${window.utils.escapeHTML(err.message)}</p>
-        </div>
-      `;
+      document.getElementById('notifications-list').innerHTML = UI.error(err, 'NotificationsView.load()');
     }
   },
 
-  async markAsRead(notifId) {
+  setFilter(f) {
+    this.filter = f;
+    window.history.replaceState(null, '', f === 'all' ? '/notifications' : `/notifications?filter=${f}`);
+    this.paint();
+  },
+
+  // Agrupa avisos del mismo tipo y destino sin leer (p. ej. "3 comentarios nuevos en «X»")
+  group(list) {
+    const groups = [];
+    list.forEach(n => {
+      const last = groups[groups.length - 1];
+      if (last && last.type === n.type && last.is_read === n.is_read && n.type !== 'account' && n.title === last.title) {
+        last.items.push(n);
+      } else {
+        groups.push({ type: n.type, is_read: n.is_read, title: n.title, items: [n] });
+      }
+    });
+    return groups;
+  },
+
+  bucket(date) {
+    const d = new Date(date);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = (today - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000;
+    if (diff <= 0) return 'Hoy';
+    if (diff === 1) return 'Ayer';
+    if (diff < 7) return 'Esta semana';
+    return 'Anteriores';
+  },
+
+  paint() {
+    const counts = {};
+    this.categories.forEach(c => { counts[c.id] = 0; });
+    this.notifs.forEach(n => { counts.all++; if (!n.is_read) counts.unread++; counts[this.kind(n)]++; });
+    document.getElementById('notif-filters').innerHTML = UI.tabs(this.categories.map(c => ({ ...c, count: counts[c.id] || null })), this.filter, 'NotificationsView.setFilter');
+
+    const list = this.notifs.filter(n => this.filter === 'all' || (this.filter === 'unread' ? !n.is_read : this.kind(n) === this.filter));
+    const box = document.getElementById('notifications-list');
+    if (!list.length) {
+      box.innerHTML = UI.empty({
+        icon: 'notifications_off', title: this.filter === 'unread' ? 'Estás al día' : 'Sin notificaciones',
+        text: 'Aquí verás comentarios y respuestas a tus publicaciones, solicitudes de chat, mensajes, nuevos miembros en tus comunidades y avisos de moderación.'
+      });
+      return;
+    }
+    const buckets = {};
+    list.forEach(n => { const b = this.bucket(n.created_at); (buckets[b] = buckets[b] || []).push(n); });
+    box.innerHTML = ['Hoy', 'Ayer', 'Esta semana', 'Anteriores'].filter(b => buckets[b]).map(b => `
+      <section class="mb-5">
+        <h3 class="mb-2 text-label-sm uppercase tracking-wider text-ink-muted">${b}</h3>
+        <div class="card divide-y divide-line p-0">
+          ${this.group(buckets[b]).map(g => this.row(g)).join('')}
+        </div>
+      </section>`).join('');
+  },
+
+  row(g) {
+    const n = g.items[0];
+    const [icon, cls] = this.style(n);
+    const many = g.items.length > 1;
+    return `
+      <div class="group flex cursor-pointer items-start gap-3 px-4 py-3.5 transition-colors hover:bg-surface-elevated ${n.is_read ? 'opacity-70' : ''}" onclick="NotificationsView.open(${UI.arg(g.items.map(x => x.id).join(','))})">
+        <span class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${cls}">${UI.icon(icon, 'text-[20px]')}${many ? `<span class="absolute -right-1 -top-1 rounded-full bg-surface-elevated px-1.5 font-mono text-[10px] text-ink ring-1 ring-line">${g.items.length}</span>` : ''}</span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 text-label-md text-ink-secondary">${UI.esc(n.title)}${!n.is_read ? '<span class="h-2 w-2 rounded-full bg-primary"></span>' : ''}</div>
+          <div class="mt-0.5 text-body-md text-ink">${many ? `${g.items.length} avisos · ${UI.esc(n.message)}` : UI.esc(n.message)}</div>
+          <div class="mt-1 text-body-sm text-ink-muted">${window.utils.formatTime(n.created_at)}</div>
+        </div>
+        ${!n.is_read ? `<button class="btn-ghost btn-sm opacity-0 group-hover:opacity-100" onclick="event.stopPropagation(); NotificationsView.markAsRead(${UI.arg(g.items.map(x => x.id).join(','))})" title="Marcar como leída">${UI.icon('done', 'text-[17px]')}</button>` : ''}
+      </div>`;
+  },
+
+  // 03_19 Alertas de reputación en la columna derecha
+  paintRail() {
+    const me = window.api.user;
+    const unread = this.notifs.filter(n => !n.is_read).length;
+    const r = UI.rank(me.karma_score || 0);
+    Router.setRail(`
+      <div class="card">
+        <h3 class="text-headline-sm">Resumen</h3>
+        <div class="mt-3 grid grid-cols-2 gap-2">
+          <div class="rounded bg-surface-base p-3"><div class="font-display text-headline-lg">${unread}</div><div class="text-body-sm text-ink-muted">Sin leer</div></div>
+          <div class="rounded bg-surface-base p-3"><div class="font-display text-headline-lg">${this.notifs.length}</div><div class="text-body-sm text-ink-muted">En total</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 class="flex items-center gap-2 text-headline-sm">${UI.icon('trending_up', 'text-primary')} Alerta de reputación</h3>
+        <p class="mt-2 text-body-sm text-ink-secondary">${r.next ? `Te faltan <strong class="text-ink">${(r.next.min - (me.karma_score || 0)).toLocaleString('es')}</strong> puntos para alcanzar <strong class="text-secondary">${r.next.name}</strong>.` : 'Alcanzaste el rango máximo.'}</p>
+        <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-base"><div class="h-full rounded-full bg-primary" style="width:${r.progress}%"></div></div>
+      </div>`);
+  },
+
+  async markAsRead(ids) {
     try {
-      await window.api.markNotificationRead(notifId);
-      await this.loadNotifications();
-      window.Router.refreshNotifBadge();
-    } catch (_) {}
+      await Promise.all(String(ids).split(',').map(id => window.api.markNotificationRead(id)));
+      await this.load();
+      Router.refreshBadges();
+    } catch (err) {
+      StatusView.toastError(err);
+    }
   },
 
   async markAllAsRead() {
     try {
       await window.api.markAllNotificationsRead();
-      await this.loadNotifications();
-      window.Router.refreshNotifBadge();
+      await this.load();
+      Router.refreshBadges();
+      window.utils.showToast('Todo marcado como leído', 'info');
     } catch (err) {
-      window.utils.showToast(err.message || 'No se pudieron marcar las notificaciones', 'error');
+      StatusView.toastError(err, 'No se pudieron marcar');
     }
   },
 
-  toggleFilter() {
-    this.onlyUnread = !this.onlyUnread;
-    this.loadNotifications();
-  },
-
-  // Abrir una notificación la marca como leída y lleva a su contenido
-  async open(notifId) {
-    const n = this.notifs.find(x => x.id === notifId);
+  // Abrir un aviso lo marca como leído y lleva a su contenido; los de moderación abren el aviso oficial (06_92)
+  async open(ids) {
+    const list = String(ids).split(',');
+    const n = this.notifs.find(x => x.id === list[0]);
     if (!n) return;
-    if (!n.is_read) {
-      try { await window.api.markNotificationRead(n.id); } catch (_) {}
-      window.Router.refreshNotifBadge();
-    }
+    if (this.kind(n) === 'account') return Router.navigate(`/notice/${n.id}`);
+    const unread = list.filter(id => !(this.notifs.find(x => x.id === id) || {}).is_read);
+    if (unread.length) { try { await Promise.all(unread.map(id => window.api.markNotificationRead(id))); } catch (_) {} Router.refreshBadges(); }
     const link = this.linkFor(n.type);
-    if (link) Router.navigate(link);
-    else await this.loadNotifications();
+    if (link) Router.navigate(link); else this.load();
   }
 };

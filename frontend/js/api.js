@@ -64,6 +64,26 @@ class ApiClient {
     return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
   }
 
+  // 06_61/06_62 Reintentos con backoff exponencial ante fallos de red (solo lecturas idempotentes)
+  async fetchWithRetry(url, options, method) {
+    const attempts = method === 'GET' ? 3 : 1;
+    for (let i = 1; ; i++) {
+      try {
+        const res = await fetch(url, options);
+        if (i > 1 && window.StatusView) StatusView.retryDone();
+        return res;
+      } catch (err) {
+        if (i >= attempts) {
+          if (window.StatusView) StatusView.retryDone();
+          throw { error: 'NETWORK_ERROR', status: 0, message: 'No se pudo conectar con el servidor' };
+        }
+        const delay = 500 * 2 ** (i - 1);
+        if (window.StatusView) StatusView.retrying(i, delay);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+
   async request(endpoint, options = {}) {
     const url = `${API_BASE}${endpoint}`;
     const headers = {
@@ -83,20 +103,21 @@ class ApiClient {
     }
 
     try {
-      const response = await fetch(url, {
-        ...options,
-        headers
-      });
+      const response = await this.fetchWithRetry(url, { ...options, headers }, method);
 
       // Manejo de 401: Intento de auto-refresh de token
       if (response.status === 401 && !endpoint.includes('/auth/')) {
+        const wasLoggedIn = !!this.user;
         const refreshed = await this.refreshToken();
         if (refreshed) {
           headers['Authorization'] = `Bearer ${this.token}`;
           const retryRes = await fetch(url, { ...options, headers });
-          if (retryRes.ok) return await retryRes.json();
+          if (retryRes.ok) return retryRes.status === 204 ? null : await retryRes.json();
         } else {
+          const lastUser = this.user && this.user.username;
           this.setSession(null, null);
+          // 06_70 Sesión expirada: se ofrece reautenticación sin perder la página
+          if (wasLoggedIn && window.StatusView) { StatusView._lastUser = lastUser; StatusView.sessionExpired(); }
         }
       }
 
@@ -437,6 +458,96 @@ class ApiClient {
       body: JSON.stringify({ status })
     });
   }
+
+  json(method, body) {
+    return { method, body: JSON.stringify(body || {}) };
+  }
+
+  // ==========================================
+  // 9. Miembros, edad y preferencias
+  // ==========================================
+
+  async listMembers(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.listFrom(await this.request(`/users${query ? '?' + query : ''}`));
+  }
+
+  // 01_06: el backend registra la mayoría de edad declarada por el usuario
+  async verifyAge(assertion) {
+    return await this.request('/users/me/verify-age', this.json('POST', { idp_assertion_token: assertion }));
+  }
+
+  async getNotificationSettings() {
+    return await this.request('/notifications/settings');
+  }
+
+  async updateNotificationSettings(settings) {
+    return await this.request('/notifications/settings', this.json('PUT', settings));
+  }
+
+  // ==========================================
+  // 10. Notas comunitarias
+  // ==========================================
+
+  async listCommunityNotes(postId) {
+    return this.listFrom(await this.request(`/community-notes?post_id=${encodeURIComponent(postId)}`));
+  }
+
+  async createCommunityNote(postId, noteText, proofUrl = '') {
+    return await this.request('/community-notes', this.json('POST', { post_id: postId, note_text: noteText, proof_url: proofUrl }));
+  }
+
+  async voteCommunityNote(noteId, isHelpful) {
+    return await this.request(`/community-notes/${noteId}/vote`, this.json('POST', { is_helpful: isHelpful }));
+  }
+
+  // ==========================================
+  // 11. Moderación de comunidades y administración
+  // ==========================================
+
+  async adminUpdateCommunitySettings(communityId, settings) {
+    return await this.request(`/admin/communities/${communityId}/settings`, this.json('PUT', settings));
+  }
+
+  async adminAssignModerator(communityId, userId, role) {
+    return await this.request(`/admin/communities/${communityId}/moderators`, this.json('POST', { user_id: userId, role }));
+  }
+
+  async adminListBans(communityId) {
+    return this.listFrom(await this.request(`/admin/communities/${communityId}/bans`));
+  }
+
+  async adminBan(userId, communityId, reason, durationDays) {
+    return await this.request('/admin/moderation/actions/ban', this.json('POST', { user_id: userId, community_id: communityId, reason, duration_days: durationDays }));
+  }
+
+  async adminUnban(userId, communityId, reason) {
+    return await this.request('/admin/moderation/actions/unban', this.json('POST', { user_id: userId, community_id: communityId, reason }));
+  }
+
+  async adminRemoveContent(contentId) {
+    return await this.request(`/admin/moderation/content/${contentId}/remove`, { method: 'DELETE' });
+  }
+
+  async adminMetrics(timeframe = '24h') {
+    return await this.request(`/admin/analytics/metrics?timeframe=${encodeURIComponent(timeframe)}`);
+  }
+
+  async adminAccountGroups(riskThreshold = 0.5) {
+    return await this.request(`/admin/security/account-groups?risk_threshold=${riskThreshold}`);
+  }
+
+  async adminReindex(body = {}) {
+    return await this.request('/admin/recommendations/reindex', this.json('POST', body));
+  }
+
+  async adminUpdateUserStatus(userId, isActive, freezeReason = '') {
+    return await this.request(`/admin/users/${userId}/status`, this.json('PATCH', { is_active: isActive, freeze_reason: freezeReason }));
+  }
+
+  async adminListAllReports(status = '') {
+    return this.listFrom(await this.request(`/admin/moderation/reports${status ? '?status=' + status : ''}`));
+  }
 }
 
 // Exportar instancia singleton
@@ -464,7 +575,9 @@ window.utils = {
         : await window.api.voteComment(id, next);
       window.utils.paintVote(box, res.current_vote, res.new_score);
     } catch (err) {
-      window.utils.showToast(err.message || 'No se pudo registrar el voto', 'error');
+      // 429 → "Vas muy rápido" (06_67); 401 → modal de autenticación; resto, aviso
+      if (window.StatusView) StatusView.toastError(err, 'No se pudo registrar el voto');
+      else window.utils.showToast(err.message || 'No se pudo registrar el voto', 'error');
     } finally {
       box.dataset.busy = '';
     }
@@ -491,6 +604,16 @@ window.utils = {
       .replace(/'/g, '&#039;');
   },
 
+  // El backend guarda los textos ya escapados (middleware.SanitizeText); se decodifican una vez
+  // antes de volver a escapar al mostrarlos, para no ver "&#39;" en pantalla.
+  decodeEntities(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
+      .replace(/&amp;/g, '&');
+  },
+
   // Argumento seguro para manejadores inline (onclick="fn(${jsArg(x)})"): genera un literal JS
   // con JSON.stringify y lo escapa para el atributo. escapeHTML solo NO basta: el navegador
   // decodifica &#039; antes de ejecutar el JS y la comilla rompe la cadena.
@@ -501,7 +624,7 @@ window.utils = {
   // Parser ligero de Markdown seguro
   renderMarkdown(text) {
     if (!text) return '';
-    let escaped = this.escapeHTML(text);
+    let escaped = this.escapeHTML(this.decodeEntities(text));
 
     // Bloques de código pre/code
     escaped = escaped.replace(/```([a-z]*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
@@ -511,8 +634,12 @@ window.utils = {
     escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     // Cursiva
     escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    // Citas (> texto), usadas por "Responder con cita"
+    escaped = escaped.replace(/(^|\n)((?:&gt; ?[^\n]*(?:\n|$))+)/g, (m, pre, block) =>
+      `${pre}<blockquote>${block.replace(/&gt; ?/g, '').trim().replace(/\n/g, '<br/>')}</blockquote>\n\n`);
     // Saltos de línea a párrafos
-    escaped = escaped.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`).join('');
+    escaped = escaped.split('\n\n').map(p => p.trim()).filter(Boolean).map(p =>
+      p.startsWith('<blockquote>') || p.startsWith('<pre>') ? p : `<p>${p.replace(/\n/g, '<br/>')}</p>`).join('');
 
     return escaped;
   },
@@ -534,22 +661,19 @@ window.utils = {
     if (!container) {
       container = document.createElement('div');
       container.id = 'toast-container';
-      container.className = 'toast-container';
+      container.className = 'fixed bottom-4 right-4 z-[110] flex max-w-sm flex-col gap-2';
       document.body.appendChild(container);
     }
-
+    const tone = { error: ['error', 'text-danger'], warning: ['warning', 'text-warning'] }[type] || ['check_circle', 'text-primary'];
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `
-      <span style="color: ${type === 'error' ? 'var(--error)' : 'var(--primary)'}">●</span>
-      <span>${this.escapeHTML(message)}</span>
-    `;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    toast.innerHTML = `<span class="icon icon-fill text-[18px] ${tone[1]}">${tone[0]}</span><span>${this.escapeHTML(message)}</span>`;
     container.appendChild(toast);
 
     setTimeout(() => {
       toast.style.opacity = '0';
-      toast.style.transform = 'translateY(10px)';
-      toast.style.transition = 'all 200ms ease';
+      toast.style.transform = 'translateY(8px)';
       setTimeout(() => toast.remove(), 200);
     }, 4000);
   }
