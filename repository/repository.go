@@ -10,7 +10,8 @@ type Repository interface {
 	GetUserByID(id string) (*models.User, error)
 	GetUserByEmail(email string) (*models.User, error)
 	GetUserByUsername(username string) (*models.User, error)
-	UpdateUserProfile(id, avatarURL, bio string) (*models.User, error)
+	UpdateUserProfile(id, username, email, avatarURL, bio string) (*models.User, error)
+	UpdateUserPassword(id, passwordHash string) error
 	UpdateUserStatus(id, status string) error
 	VerifyUserAge(id string) error
 	ListUsers(search, role, status string, page, limit int) ([]*models.User, int, error)

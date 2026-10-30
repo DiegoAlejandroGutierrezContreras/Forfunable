@@ -183,24 +183,37 @@ func (p *PostgresRepository) GetUserByUsername(username string) (*models.User, e
 	return u, nil
 }
 
-func (p *PostgresRepository) UpdateUserProfile(id, avatarURL, bio string) (*models.User, error) {
+// UpdateUserProfile guarda los datos editables del perfil (el handler ya combinó los valores actuales).
+func (p *PostgresRepository) UpdateUserProfile(id, username, email, avatarURL, bio string) (*models.User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	query := `UPDATE users
-		SET avatar_url = COALESCE(NULLIF($2, ''), avatar_url),
-		    bio = COALESCE(NULLIF($3, ''), bio)
+		SET username = $2, email = $3, avatar_url = NULLIF($4, ''), bio = NULLIF($5, '')
 		WHERE id = $1
 		RETURNING id, username, email, global_role, COALESCE(avatar_url,''), COALESCE(bio,''),
 		          presence_status, karma_score, is_adult_verified, is_active, created_at`
 	u := &models.User{}
-	err := p.db.QueryRowContext(ctx, query, id, avatarURL, bio).Scan(
+	err := p.db.QueryRowContext(ctx, query, id, username, email, avatarURL, bio).Scan(
 		&u.ID, &u.Username, &u.Email, &u.GlobalRole, &u.AvatarURL, &u.Bio,
 		&u.PresenceStatus, &u.KarmaScore, &u.IsAdultVerified, &u.IsActive, &u.CreatedAt,
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "users_username_key") {
+			return nil, errors.New("ese nombre de usuario ya está en uso")
+		}
+		if strings.Contains(err.Error(), "users_email_key") {
+			return nil, errors.New("ese correo ya se encuentra registrado")
+		}
 		return nil, fmt.Errorf("error al actualizar perfil: %w", err)
 	}
 	return u, nil
+}
+
+func (p *PostgresRepository) UpdateUserPassword(id, passwordHash string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := p.db.ExecContext(ctx, `UPDATE users SET password_hash = $2 WHERE id = $1`, id, passwordHash)
+	return err
 }
 
 func (p *PostgresRepository) UpdateUserStatus(id, status string) error {

@@ -317,20 +317,37 @@ func (m *MemoryRepository) GetUserByUsername(username string) (*models.User, err
 	return u, nil
 }
 
-func (m *MemoryRepository) UpdateUserProfile(id, avatarURL, bio string) (*models.User, error) {
+func (m *MemoryRepository) UpdateUserProfile(id, username, email, avatarURL, bio string) (*models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	u, ok := m.users[id]
 	if !ok {
 		return nil, errors.New("usuario no encontrado")
 	}
-	if avatarURL != "" {
-		u.AvatarURL = avatarURL
+	for _, other := range m.users {
+		if other.ID == id {
+			continue
+		}
+		if strings.EqualFold(other.Username, username) {
+			return nil, errors.New("ese nombre de usuario ya está en uso")
+		}
+		if strings.EqualFold(other.Email, email) {
+			return nil, errors.New("ese correo ya se encuentra registrado")
+		}
 	}
-	if bio != "" {
-		u.Bio = bio
-	}
+	u.Username, u.Email, u.AvatarURL, u.Bio = username, email, avatarURL, bio
 	return u, nil
+}
+
+func (m *MemoryRepository) UpdateUserPassword(id, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[id]
+	if !ok {
+		return errors.New("usuario no encontrado")
+	}
+	u.PasswordHash = passwordHash
+	return nil
 }
 
 func (m *MemoryRepository) UpdateUserStatus(id, status string) error {

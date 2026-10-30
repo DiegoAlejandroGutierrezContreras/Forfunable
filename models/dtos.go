@@ -26,9 +26,17 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// UpdateProfileRequest: los campos omitidos no se modifican; bio y avatar_url vacíos los borran
 type UpdateProfileRequest struct {
-	AvatarURL string `json:"avatar_url"`
-	Bio       string `json:"bio"`
+	Username  *string `json:"username"`
+	Email     *string `json:"email"`
+	AvatarURL *string `json:"avatar_url"`
+	Bio       *string `json:"bio"`
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
 }
 
 type UpdateStatusRequest struct {

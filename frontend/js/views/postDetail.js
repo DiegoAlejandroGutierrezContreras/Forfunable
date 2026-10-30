@@ -150,7 +150,6 @@ window.PostDetailView = {
             <span style="font-weight: 600; color: var(--text-primary);">u/${window.utils.escapeHTML(c.author_username || 'usuario')}</span>
             <span>•</span>
             <span>${window.utils.formatTime(c.created_at)}</span>
-            ${c.path ? `<span class="chip" style="font-size: 10px; padding: 1px 4px;">ltree: ${c.path}</span>` : ''}
           </div>
 
           <div style="font-size: 14px; color: ${isDeleted ? 'var(--text-muted)' : 'var(--text-primary)'}; margin-bottom: 8px; font-style: ${isDeleted ? 'italic' : 'normal'};">
@@ -228,7 +227,7 @@ window.PostDetailView = {
 
       inputEl.value = '';
       if (parentId) this.toggleReplyBox(parentId);
-      window.utils.showToast('Comentario indexado en ltree exitosamente', 'info');
+      window.utils.showToast('Comentario publicado', 'info');
       await this.loadComments(postId);
     } catch (err) {
       window.utils.showToast(err.message || 'Error al publicar comentario', 'error');
@@ -277,7 +276,7 @@ window.PostDetailView = {
     if (!confirm('¿Eliminar tu comentario? Se preservará el árbol de respuestas como [comentario eliminado].')) return;
     try {
       await window.api.deleteComment(commentId);
-      window.utils.showToast('Comentario eliminado preservando ltree', 'info');
+      window.utils.showToast('Comentario eliminado', 'info');
       await this.loadComments(this.currentPost.id);
     } catch (err) {
       window.utils.showToast(err.message || 'Error al eliminar', 'error');

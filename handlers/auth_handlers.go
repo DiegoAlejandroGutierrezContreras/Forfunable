@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"net/mail"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode"
@@ -30,6 +32,11 @@ func (h *AuthHandler) setRefreshCookie(c *gin.Context, value string, maxAge int)
 	c.SetCookie("refresh_token", value, maxAge, "/", "", h.cfg.IsProduction(), true)
 }
 
+// validPassword: al menos 8 caracteres, una letra y un número (igual que el formulario)
+func validPassword(pw string) bool {
+	return len(pw) >= 8 && strings.ContainsAny(pw, "0123456789") && strings.ContainsFunc(pw, unicode.IsLetter)
+}
+
 // usernamePattern es la misma regla que valida el formulario de registro
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 
@@ -53,8 +60,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// Validación de contraseña (misma regla que muestra el formulario de registro)
-	if len(req.Password) < 8 || !strings.ContainsAny(req.Password, "0123456789") ||
-		!strings.ContainsFunc(req.Password, unicode.IsLetter) {
+	if !validPassword(req.Password) {
 		c.JSON(http.StatusUnprocessableEntity, models.ErrorResponse{
 			Error:   "UNPROCESSABLE_ENTITY",
 			Message: "La contraseña debe tener al menos 8 caracteres, una letra y un número",
@@ -267,11 +273,47 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	// Sanitización contra XSS
-	req.Bio = middleware.SanitizeText(req.Bio)
-
-	updated, err := h.repo.UpdateUserProfile(userID, req.AvatarURL, req.Bio)
+	current, err := h.repo.GetUserByID(userID)
 	if err != nil {
+		c.JSON(http.StatusNotFound, models.ErrorResponse{
+			Error:   "NOT_FOUND",
+			Message: "Usuario no encontrado",
+		})
+		return
+	}
+
+	// Los campos omitidos conservan su valor actual
+	username, email, avatarURL, bio := current.Username, current.Email, current.AvatarURL, current.Bio
+	if req.Username != nil {
+		username = strings.TrimSpace(*req.Username)
+	}
+	if req.Email != nil {
+		email = strings.ToLower(strings.TrimSpace(*req.Email))
+	}
+	if req.AvatarURL != nil {
+		avatarURL = strings.TrimSpace(*req.AvatarURL)
+	}
+	if req.Bio != nil {
+		bio = middleware.SanitizeText(strings.TrimSpace(*req.Bio))
+	}
+
+	if msg := validateProfile(username, email, avatarURL, bio); msg != "" {
+		c.JSON(http.StatusUnprocessableEntity, models.ErrorResponse{
+			Error:   "UNPROCESSABLE_ENTITY",
+			Message: msg,
+		})
+		return
+	}
+
+	updated, err := h.repo.UpdateUserProfile(userID, username, email, avatarURL, bio)
+	if err != nil {
+		if strings.Contains(err.Error(), "ya está en uso") || strings.Contains(err.Error(), "ya se encuentra registrado") {
+			c.JSON(http.StatusConflict, models.ErrorResponse{
+				Error:   "CONFLICT",
+				Message: err.Error(),
+			})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
 			Message: "No se pudo actualizar el perfil",
@@ -279,6 +321,76 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, updated)
+}
+
+// validateProfile aplica las mismas reglas que el formulario de registro y de edición de perfil
+func validateProfile(username, email, avatarURL, bio string) string {
+	if len(username) < 3 || len(username) > 30 || !usernamePattern.MatchString(username) {
+		return "El nombre de usuario debe tener entre 3 y 30 caracteres: letras, números y guion bajo (_)"
+	}
+	if addr, err := mail.ParseAddress(email); err != nil || addr.Address != email || !strings.Contains(email[strings.LastIndex(email, "@"):], ".") {
+		return "El correo electrónico no es válido"
+	}
+	if avatarURL != "" {
+		u, err := url.Parse(avatarURL)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || len(avatarURL) > 500 {
+			return "La foto de perfil debe ser un enlace http(s) válido a una imagen"
+		}
+	}
+	if len([]rune(bio)) > 300 {
+		return "La biografía admite como máximo 300 caracteres"
+	}
+	return ""
+}
+
+// ChangePassword maneja PATCH /api/v1/users/me/password (200 OK)
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	userID := c.GetString("user_id")
+	var req models.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error:   "BAD_REQUEST",
+			Message: "Escribe tu contraseña actual y la nueva",
+		})
+		return
+	}
+
+	user, err := h.repo.GetUserByID(userID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.ErrorResponse{
+			Error:   "NOT_FOUND",
+			Message: "Usuario no encontrado",
+		})
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)) != nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Error:   "INVALID_CREDENTIALS",
+			Message: "La contraseña actual no es correcta",
+		})
+		return
+	}
+	if !validPassword(req.NewPassword) {
+		c.JSON(http.StatusUnprocessableEntity, models.ErrorResponse{
+			Error:   "UNPROCESSABLE_ENTITY",
+			Message: "La contraseña debe tener al menos 8 caracteres, una letra y un número",
+		})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil || h.repo.UpdateUserPassword(userID, string(hash)) != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error:   "INTERNAL_ERROR",
+			Message: "No se pudo cambiar la contraseña",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.StandardResponse{
+		Success: true,
+		Message: "Contraseña actualizada",
+	})
 }
 
 // UpdateStatus maneja PATCH /api/v1/users/me/status (200 OK)

@@ -133,6 +133,7 @@ func main() {
 				usersAuth.GET("/me", authHandler.GetMe)
 				usersAuth.PATCH("/me/profile", authHandler.UpdateProfile)
 				usersAuth.PATCH("/me/status", authHandler.UpdateStatus)
+				usersAuth.PATCH("/me/password", authHandler.ChangePassword)
 				usersAuth.POST("/me/verify-age", authHandler.VerifyAge)
 				usersAuth.POST("/block", chatHandler.BlockUser)
 			}

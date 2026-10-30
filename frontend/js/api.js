@@ -190,6 +190,13 @@ class ApiClient {
     });
   }
 
+  async changePassword(currentPassword, newPassword) {
+    return await this.request('/users/me/password', {
+      method: 'PATCH',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+    });
+  }
+
   async getPublicProfile(idOrUsername) {
     return await this.request(`/users/${idOrUsername}`);
   }
