@@ -95,7 +95,7 @@
     }).strict(),
     noteVote: z.object({ is_helpful: z.boolean() }).strict(),
     reindex: z.object({}).passthrough(),
-    chatMessage: z.object({ message_text: text(1, 2000, 'un mensaje') }).strict(),
+    chatMessage: z.object({ message_text: text(1, 2000, 'un mensaje'), reply_to_id: id.optional() }).strict(),
 
     save: z.object({ collection_id: optionalId, note: optionalText(500) }).strict(),
     collection: z.object({ name: text(1, 60, 'un nombre'), description: optionalText(200) }).strict(),

@@ -105,9 +105,70 @@ window.AdminView = {
             </a>`).join('') : '<p class="text-body-sm text-ink-muted">Sin comunidades.</p>'}
         </div>
       </div>`;
+    if (this.isAdmin()) {
+      this.box().insertAdjacentHTML('beforeend', '<div id="db-status" class="mt-4"></div>');
+      this.dbStatus();
+    }
   },
 
   // 05_35 Administración y cola de reportes
+  // Estado de las migraciones de la base de datos (funciones extendidas) con arreglo guiado
+  async dbStatus(retry = false) {
+    const box = document.getElementById('db-status');
+    if (!box) return;
+    let st;
+    try {
+      st = retry ? await window.api.request('/admin/system/migrate', { method: 'POST' }) : await window.api.request('/admin/system/migrations');
+    } catch (err) {
+      box.innerHTML = UI.error(err);
+      return;
+    }
+    this._fixSQL = st.fix_sql || '';
+    const groups = Object.entries(st.groups || {});
+    const allOk = groups.every(([, ok]) => ok);
+    box.innerHTML = `
+      <div class="card ${allOk ? '' : 'border-warning/40'}">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="flex items-center gap-2 text-headline-sm">${UI.icon('database', allOk ? 'text-primary' : 'text-warning')} Estado de la base de datos</h3>
+          <span class="flex items-center gap-2">
+            <span class="font-mono text-body-sm text-ink-muted">usuario: ${UI.esc(st.db_user || '?')}</span>
+            <button class="btn-secondary btn-sm" ${UI.on('click', 'AdminView.retryMigration', UI.EL)}>${UI.icon('sync', 'text-[17px]')} Reintentar migración</button>
+          </span>
+        </div>
+        <div class="mt-3 grid gap-2 md:grid-cols-3">
+          ${groups.map(([name, ok]) => `
+            <div class="flex items-start gap-2 rounded border border-line bg-surface-base p-3">
+              ${UI.icon(ok ? 'check_circle' : 'error', `text-[19px] ${ok ? 'text-primary' : 'text-warning'}`)}
+              <div><div class="text-label-lg">${ok ? 'Activo' : 'Desactivado'}</div><div class="text-body-sm text-ink-secondary">${UI.esc((st.labels || {})[name] || name)}</div></div>
+            </div>`).join('')}
+        </div>
+        ${allOk ? `<p class="mt-3 text-body-sm text-ink-muted">Todas las funciones nuevas están activas. Última comprobación: ${new Date(st.checked_at).toLocaleString('es')}.</p>` : `
+          <div class="mt-4 rounded border border-warning/30 bg-warning/5 p-4 text-body-sm">
+            <div class="text-label-lg text-warning">Cómo activarlas</div>
+            <ol class="mt-2 list-decimal pl-5 text-ink-secondary">
+              <li>Abre <strong class="text-ink">Cloud SQL › tu instancia › Cloud SQL Studio</strong> e inicia sesión con el usuario <span class="font-mono">postgres</span>.</li>
+              <li>Ejecuta este SQL (da permiso al usuario de la app para crear sus tablas):</li>
+            </ol>
+            <pre class="mt-2 overflow-x-auto rounded border border-line bg-surface-base p-3 font-mono text-[12px] text-ink">${UI.esc(st.fix_sql || '')}</pre>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <button class="btn-secondary btn-sm" ${UI.on('click', 'AdminView.copyFix')}>${UI.icon('content_copy', 'text-[16px]')} Copiar SQL</button>
+            </div>
+            <p class="mt-3 text-ink-secondary">3. Vuelve aquí y pulsa <strong class="text-ink">Reintentar migración</strong>. No hace falta redesplegar.</p>
+            ${(st.errors || []).length ? `<details class="mt-3"><summary class="cursor-pointer text-ink-muted">Detalle técnico (${st.errors.length} errores)</summary><ul class="mt-2 list-disc pl-5 font-mono text-[12px] text-ink-muted">${st.errors.slice(0, 12).map(e => `<li>${UI.esc(e)}</li>`).join('')}</ul></details>` : ''}
+          </div>`}
+      </div>`;
+  },
+
+  async retryMigration(btn) {
+    btn.disabled = true;
+    btn.innerHTML = `${UI.icon('progress_activity', 'animate-spin text-[17px]')} Aplicando…`;
+    await this.dbStatus(true);
+    const ok = !document.querySelector('#db-status .border-warning\\/40');
+    window.utils.showToast(ok ? 'Migración completada: funciones activas' : 'Todavía faltan permisos: revisa los pasos', ok ? 'info' : 'warning');
+  },
+
+  copyFix() { UI.copy(this._fixSQL || '', 'SQL copiado'); },
+
   async reports() {
     const reports = await window.api.adminListReports();
     this.reportList = reports;

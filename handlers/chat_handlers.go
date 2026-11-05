@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -225,7 +228,7 @@ func (h *ChatHandler) ListConversations(c *gin.Context) {
 
 	var convs []*models.ChatConversation
 	var err error
-	if h.Ext.Available() {
+	if h.Ext.ChatReady() {
 		// Abrir la bandeja confirma la entrega de lo recibido (doble marca gris)
 		_ = h.Ext.MarkChatDelivered(userID)
 		convs, err = h.Ext.ListChatConversations(userID)
@@ -271,7 +274,7 @@ func (h *ChatHandler) ListMessages(c *gin.Context) {
 	}
 
 	var messages []*models.ChatMessage
-	if h.Ext.Available() {
+	if h.Ext.ChatReady() {
 		// Abrir la conversación marca como leído lo recibido (doble marca azul)
 		_ = h.Ext.MarkChatRead(convID, userID)
 		if limit <= 50 {
@@ -292,6 +295,13 @@ func (h *ChatHandler) ListMessages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"conversation_id": convID,
 		"messages":        messages,
+		"features": gin.H{
+			"receipts":    h.Ext.ChatReady(),
+			"edit_delete": h.Ext.ChatReady(),
+			"replies":     h.Ext.MediaReady(),
+			"attachments": h.Ext.MediaReady(),
+			"max_file_mb": ChatMaxFileBytes >> 20,
+		},
 	})
 }
 
@@ -327,6 +337,13 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 	}
 
 	req.MessageText = middleware.SanitizeText(req.MessageText)
+	if req.ReplyToID != "" && (!h.Ext.MediaReady() || !h.Ext.ReplyTargetOK(req.ReplyToID, convID)) {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "BAD_REQUEST", Message: "El mensaje al que respondes no existe en esta conversación"})
+		return
+	}
+	if h.Ext.ChatReady() {
+		req.AttachmentURL = "" // los adjuntos solo se crean con la subida de archivos
+	}
 
 	msg := &models.ChatMessage{
 		ConversationID: convID,
@@ -350,8 +367,11 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 	notify(h.repo, recipientID, userID, "Nuevo mensaje",
 		"u/"+c.GetString("username")+" te envió un mensaje privado", notifChat)
 
-	if h.Ext.Available() {
+	if h.Ext.ChatReady() {
 		msg.Status = "sent"
+	}
+	if req.ReplyToID != "" {
+		_ = h.Ext.SetReply(msg.ID, req.ReplyToID, convID)
 	}
 	c.JSON(http.StatusCreated, msg)
 }
@@ -385,7 +405,7 @@ func (h *ChatHandler) BlockUser(c *gin.Context) {
 
 // chatMessageForUser carga el mensaje y comprueba que quien llama participa en la conversación.
 func (h *ChatHandler) chatMessageForUser(c *gin.Context) *repository.ChatMessageRef {
-	if !h.Ext.Available() {
+	if !h.Ext.ChatReady() {
 		extError(c, repository.ErrExtendedUnavailable, http.StatusServiceUnavailable)
 		return nil
 	}
@@ -479,7 +499,7 @@ func (h *ChatHandler) DeleteMessage(c *gin.Context) {
 // UnreadCount maneja GET /api/v1/chats/unread (200 OK): mensajes sin leer.
 // Al consultarlo, la app confirma la entrega de lo recibido (doble marca gris para el remitente).
 func (h *ChatHandler) UnreadCount(c *gin.Context) {
-	if !h.Ext.Available() {
+	if !h.Ext.ChatReady() {
 		c.JSON(http.StatusOK, gin.H{"unread": 0})
 		return
 	}
@@ -491,4 +511,175 @@ func (h *ChatHandler) UnreadCount(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"unread": n})
+}
+
+// --- Adjuntos del chat (V005): fotos, GIF, vídeo, audio y documentos, como en WhatsApp ---
+
+// ChatMaxFileBytes es el tamaño máximo de un adjunto
+const ChatMaxFileBytes = 15 << 20
+
+// Tipos admitidos por extensión → (tipo MIME servido, categoría). El contenido real se comprueba
+// además con http.DetectContentType para que un ejecutable o HTML no pase por imagen.
+var chatFileTypes = map[string][2]string{
+	".jpg": {"image/jpeg", "image"}, ".jpeg": {"image/jpeg", "image"}, ".png": {"image/png", "image"},
+	".webp": {"image/webp", "image"}, ".gif": {"image/gif", "gif"},
+	".mp4": {"video/mp4", "video"}, ".webm": {"video/webm", "video"}, ".mov": {"video/quicktime", "video"},
+	".mp3": {"audio/mpeg", "audio"}, ".ogg": {"audio/ogg", "audio"}, ".opus": {"audio/ogg", "audio"}, ".wav": {"audio/wav", "audio"},
+	".m4a": {"audio/mp4", "audio"}, ".aac": {"audio/aac", "audio"}, ".weba": {"audio/webm", "audio"},
+	".pdf": {"application/pdf", "file"}, ".txt": {"text/plain; charset=utf-8", "file"}, ".csv": {"text/csv; charset=utf-8", "file"},
+	".md": {"text/markdown; charset=utf-8", "file"}, ".json": {"application/json", "file"},
+	".doc": {"application/msword", "file"}, ".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "file"},
+	".xls": {"application/vnd.ms-excel", "file"}, ".xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "file"},
+	".ppt": {"application/vnd.ms-powerpoint", "file"}, ".pptx": {"application/vnd.openxmlformats-officedocument.presentationml.presentation", "file"},
+	".odt": {"application/vnd.oasis.opendocument.text", "file"}, ".ods": {"application/vnd.oasis.opendocument.spreadsheet", "file"},
+	".zip": {"application/zip", "file"}, ".rar": {"application/vnd.rar", "file"}, ".7z": {"application/x-7z-compressed", "file"},
+}
+
+// sniffMatches verifica que el contenido corresponde a la categoría declarada por la extensión.
+func sniffMatches(kind, ext string, data []byte) bool {
+	sniffed := http.DetectContentType(data)
+	switch kind {
+	case "image":
+		return strings.HasPrefix(sniffed, "image/") && sniffed != "image/svg+xml"
+	case "gif":
+		return sniffed == "image/gif"
+	case "video":
+		return strings.HasPrefix(sniffed, "video/") || sniffed == "application/octet-stream" // .mov no siempre se detecta
+	case "audio":
+		return strings.HasPrefix(sniffed, "audio/") || sniffed == "application/ogg" || sniffed == "video/webm" || sniffed == "application/octet-stream"
+	}
+	// Documentos: se rechaza cualquier cosa que el navegador pudiera interpretar como página o script
+	return !strings.HasPrefix(sniffed, "text/html") && !strings.HasPrefix(sniffed, "text/xml") && sniffed != "image/svg+xml" &&
+		(ext != ".txt" && ext != ".csv" && ext != ".md" && ext != ".json" || strings.HasPrefix(sniffed, "text/plain") || strings.HasPrefix(sniffed, "application/json"))
+}
+
+func cleanFilename(name string) string {
+	name = filepath.Base(strings.ReplaceAll(name, "\\", "/"))
+	name = strings.Map(func(r rune) rune {
+		if r < 32 || r == '"' || r == '/' || r == '\\' || r == '<' || r == '>' {
+			return '_'
+		}
+		return r
+	}, name)
+	if r := []rune(name); len(r) > 120 {
+		ext := filepath.Ext(name)
+		name = string(r[:120-len([]rune(ext))]) + ext
+	}
+	if name == "" || name == "." {
+		name = "archivo"
+	}
+	return name
+}
+
+// UploadAttachment maneja POST /api/v1/chats/conversations/:id/attachments (201 Created).
+// multipart/form-data: file (obligatorio), caption y reply_to_id (opcionales).
+func (h *ChatHandler) UploadAttachment(c *gin.Context) {
+	if !h.Ext.MediaReady() {
+		extError(c, repository.ErrExtendedUnavailable, http.StatusServiceUnavailable)
+		return
+	}
+	userID := c.GetString("user_id")
+	convID := c.Param("id")
+	conv, err := h.repo.GetConversationByID(convID)
+	if err != nil || (conv.User1ID != userID && conv.User2ID != userID) {
+		extError(c, errors.New("conversación no encontrada"), http.StatusNotFound)
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, ChatMaxFileBytes+(1<<20))
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			c.JSON(http.StatusRequestEntityTooLarge, models.ErrorResponse{Error: "FILE_TOO_LARGE", Message: fmt.Sprintf("El archivo supera el máximo de %d MB", ChatMaxFileBytes>>20)})
+			return
+		}
+		extError(c, fmt.Errorf("adjunta un archivo de hasta %d MB", ChatMaxFileBytes>>20), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, ChatMaxFileBytes+1))
+	if err != nil || len(data) == 0 {
+		extError(c, errors.New("no se pudo leer el archivo"), http.StatusBadRequest)
+		return
+	}
+	if len(data) > ChatMaxFileBytes {
+		c.JSON(http.StatusRequestEntityTooLarge, models.ErrorResponse{Error: "FILE_TOO_LARGE", Message: fmt.Sprintf("El archivo supera el máximo de %d MB", ChatMaxFileBytes>>20)})
+		return
+	}
+	name := cleanFilename(header.Filename)
+	ext := strings.ToLower(filepath.Ext(name))
+	t, ok := chatFileTypes[ext]
+	if !ok || !sniffMatches(t[1], ext, data) {
+		c.JSON(http.StatusUnsupportedMediaType, models.ErrorResponse{Error: "UNSUPPORTED_FILE", Message: "Tipo de archivo no permitido. Puedes enviar fotos, GIF, vídeos, audios y documentos (PDF, Office, texto, ZIP)."})
+		return
+	}
+	caption := middleware.SanitizeText(c.PostForm("caption"))
+	if len([]rune(caption)) > 2000 {
+		extError(c, errors.New("el texto admite máximo 2000 caracteres"), http.StatusBadRequest)
+		return
+	}
+	replyTo := strings.TrimSpace(c.PostForm("reply_to_id"))
+	if replyTo != "" && !h.Ext.ReplyTargetOK(replyTo, convID) {
+		extError(c, errors.New("el mensaje al que respondes no existe en esta conversación"), http.StatusBadRequest)
+		return
+	}
+
+	msg := &models.ChatMessage{ConversationID: convID, SenderID: userID, MessageText: caption}
+	if err := h.repo.CreateChatMessage(msg); err != nil {
+		extError(c, errors.New("error al enviar el archivo"), http.StatusInternalServerError)
+		return
+	}
+	meta, err := h.Ext.SaveAttachment(msg.ID, userID, t[1], name, t[0], data)
+	if err != nil {
+		h.Ext.DeleteChatMessageHard(msg.ID)
+		extError(c, errors.New("error al guardar el archivo"), http.StatusInternalServerError)
+		return
+	}
+	if replyTo != "" {
+		_ = h.Ext.SetReply(msg.ID, replyTo, convID)
+	}
+	msg.Attachment, msg.Status = meta, "sent"
+
+	recipientID := conv.User1ID
+	if recipientID == userID {
+		recipientID = conv.User2ID
+	}
+	label := map[string]string{"image": "una foto", "gif": "un GIF", "video": "un vídeo", "audio": "un audio", "file": "un archivo"}[t[1]]
+	notify(h.repo, recipientID, userID, "Nuevo mensaje", "u/"+c.GetString("username")+" te envió "+label, notifChat)
+	c.JSON(http.StatusCreated, msg)
+}
+
+// DownloadAttachment maneja GET /api/v1/chats/attachments/:id: solo para los dos participantes.
+func (h *ChatHandler) DownloadAttachment(c *gin.Context) {
+	if !h.Ext.MediaReady() {
+		extError(c, repository.ErrExtendedUnavailable, http.StatusServiceUnavailable)
+		return
+	}
+	f, err := h.Ext.GetAttachment(c.Param("id"))
+	uid := c.GetString("user_id")
+	if err != nil || (f.User1ID != uid && f.User2ID != uid) {
+		extError(c, errors.New("archivo no encontrado"), http.StatusNotFound)
+		return
+	}
+	disposition := "attachment"
+	if f.Kind != "file" && c.Query("download") != "1" {
+		disposition = "inline"
+	}
+	// El archivo nunca se ejecuta como página: sandbox y sin scripts aunque se abra directamente
+	c.Header("Content-Security-Policy", "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+	c.Header("Cache-Control", "private, max-age=86400")
+	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename="%s"; filename*=UTF-8''%s`, disposition, strings.ReplaceAll(f.Filename, `"`, "_"), urlPathEscape(f.Filename)))
+	c.Data(http.StatusOK, f.MimeType, f.Data)
+}
+
+func urlPathEscape(s string) string {
+	var b strings.Builder
+	for _, by := range []byte(s) {
+		if (by >= 'a' && by <= 'z') || (by >= 'A' && by <= 'Z') || (by >= '0' && by <= '9') || strings.IndexByte("-._~", by) >= 0 {
+			b.WriteByte(by)
+		} else {
+			fmt.Fprintf(&b, "%%%02X", by)
+		}
+	}
+	return b.String()
 }

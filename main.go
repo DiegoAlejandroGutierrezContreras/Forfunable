@@ -64,6 +64,9 @@ func main() {
 		log.Println("[OK] reCAPTCHA Enterprise verification active")
 	}
 
+	// Funciones extendidas: se crea más abajo; /health informa de su estado
+	var extRepo *repository.ExtendedRepository
+
 	// --- Health Check (FASE 3) ---
 	// Verifica API + PostgreSQL. Devuelve 503 si la BD no responde.
 	r.GET("/health", func(c *gin.Context) {
@@ -87,6 +90,18 @@ func main() {
 			}(),
 			"environment": cfg.Environment,
 			"database":    dbStatus,
+			"extended_features": func() string {
+				switch {
+				case extRepo == nil:
+					return "UNKNOWN"
+				case extRepo.Available() && extRepo.MediaReady():
+					return "ACTIVE"
+				case extRepo.Available() || extRepo.ChatReady():
+					return "PARTIAL"
+				default:
+					return "UNAVAILABLE"
+				}
+			}(),
 		})
 	})
 
@@ -111,25 +126,30 @@ func main() {
 	extraHandler := handlers.NewExtraHandler(pgRepo)
 	adminHandler := handlers.NewAdminHandler(pgRepo)
 
-	// --- Funciones extendidas (migración V003: tablas nuevas, idempotente) ---
-	extRepo := repository.NewExtendedRepository(pgRepo)
+	// --- Funciones extendidas (migraciones V003-V005: tablas nuevas, idempotentes) ---
+	// Cada grupo se activa por separado; si faltan permisos, la Consola de administración
+	// muestra el diagnóstico y el SQL para corregirlo, y permite reintentar sin redesplegar.
+	extRepo = repository.NewExtendedRepository(pgRepo)
 	if err := extRepo.Migrate(); err != nil {
-		log.Printf("[WARN] Funciones extendidas desactivadas (guardados, sesiones, apelaciones…): %v. Aplica database/migrations/V003__extended_features.sql con un usuario propietario.", err)
-	} else {
-		log.Println("[OK] Funciones extendidas activas (migración V003)")
-		middleware.SessionValidator = extRepo.SessionActive
-		// Anonimiza cada hora las cuentas cuyo periodo de gracia de eliminación venció
-		go func() {
-			for {
+		log.Printf("[WARN] Funciones extendidas desactivadas: %v. Revisa Consola de administración > Métricas > Estado de la base de datos (o database/migrations/grant_app_user.sql).", err)
+	}
+	for name, ok := range extRepo.Status().Groups {
+		log.Printf("[INFO] Funciones extendidas %-10s activas=%v", name, ok)
+	}
+	middleware.SessionValidator = extRepo.SessionActive
+	// Anonimiza cada hora las cuentas cuyo periodo de gracia de eliminación venció
+	go func() {
+		for {
+			if extRepo.Available() {
 				if n, err := extRepo.PurgeDueDeletions(); err != nil {
 					log.Printf("[WARN] Purga de cuentas: %v", err)
 				} else if n > 0 {
 					log.Printf("[INFO] %d cuentas eliminadas tras su periodo de gracia", n)
 				}
-				time.Sleep(time.Hour)
 			}
-		}()
-	}
+			time.Sleep(time.Hour)
+		}
+	}()
 	authHandler.Ext = extRepo
 	postHandler.Ext = extRepo
 	commHandler.Ext = extRepo
@@ -261,6 +281,8 @@ func main() {
 			chats.PATCH("/messages/:id", chatHandler.EditMessage)
 			chats.DELETE("/messages/:id", chatHandler.DeleteMessage)
 			chats.GET("/unread", chatHandler.UnreadCount)
+			chats.POST("/conversations/:id/attachments", chatHandler.UploadAttachment)
+			chats.GET("/attachments/:id", chatHandler.DownloadAttachment)
 		}
 
 		// Módulo 1.7: Sistema de Notificaciones
@@ -334,6 +356,8 @@ func main() {
 			admin.GET("/appeals", extHandler.AdminListAppeals)
 			admin.PATCH("/appeals/:id", extHandler.AdminDecideAppeal)
 			admin.DELETE("/users/:id", extHandler.AdminDeleteUser)
+			admin.GET("/system/migrations", extHandler.MigrationStatus)
+			admin.POST("/system/migrate", extHandler.RetryMigration)
 			admin.GET("/analytics/metrics", adminHandler.GetAnalyticsMetrics)
 			admin.POST("/recommendations/reindex", adminHandler.ReindexRecommendations)
 

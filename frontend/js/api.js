@@ -91,6 +91,8 @@ class ApiClient {
       'Content-Type': 'application/json',
       ...(options.headers || {})
     };
+    // FormData (subida de archivos): el navegador pone el Content-Type con su boundary
+    if (typeof FormData !== 'undefined' && options.body instanceof FormData) delete headers['Content-Type'];
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
@@ -436,7 +438,56 @@ class ApiClient {
   }
 
   async listMessages(convId) {
-    return this.listFrom(await this.request(`/chats/conversations/${convId}/messages`), 'messages');
+    return (await this.listMessagesFull(convId)).messages;
+  }
+
+  // Mensajes + funciones disponibles en el servidor (marcas, editar/eliminar, responder, adjuntos)
+  async listMessagesFull(convId) {
+    const data = await this.request(`/chats/conversations/${convId}/messages`);
+    return { messages: this.listFrom(data, 'messages'), features: (data && data.features) || {} };
+  }
+
+  // Sube un adjunto con progreso (XHR). opts: { caption, replyTo, onProgress(0..1) }
+  uploadAttachment(convId, file, opts = {}, retried = false) {
+    return new Promise((resolve, reject) => {
+      const form = new FormData();
+      form.append('file', file, file.name || 'archivo');
+      if (opts.caption) form.append('caption', opts.caption);
+      if (opts.replyTo) form.append('reply_to_id', opts.replyTo);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_BASE}/chats/conversations/${convId}/attachments`);
+      if (this.token) xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+      const csrf = this.getCookie('csrf_token');
+      if (csrf) xhr.setRequestHeader('X-CSRF-Token', csrf);
+      xhr.upload.onprogress = e => { if (e.lengthComputable && opts.onProgress) opts.onProgress(e.loaded / e.total); };
+      xhr.onload = async () => {
+        let data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (_) {}
+        if (xhr.status === 401 && !retried && await this.refreshToken()) {
+          return this.uploadAttachment(convId, file, opts, true).then(resolve, reject);
+        }
+        if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
+        reject({ ...(data || { error: 'HTTP_ERROR', message: 'No se pudo subir el archivo' }), status: xhr.status });
+      };
+      xhr.onerror = () => reject({ error: 'NETWORK_ERROR', status: 0, message: 'No se pudo conectar con el servidor' });
+      xhr.send(form);
+    });
+  }
+
+  // Descarga autenticada de un adjunto → URL blob: (en caché; la CSP permite blob: en img/media)
+  async attachmentURL(id) {
+    this._attCache = this._attCache || new Map();
+    if (this._attCache.has(id)) return this._attCache.get(id);
+    const p = (async () => {
+      const get = () => fetch(`${API_BASE}/chats/attachments/${encodeURIComponent(id)}`, { headers: this.token ? { Authorization: `Bearer ${this.token}` } : {}, credentials: 'same-origin' });
+      let res = await get();
+      if (res.status === 401 && await this.refreshToken()) res = await get();
+      if (!res.ok) throw { status: res.status, message: res.status === 404 ? 'El archivo ya no está disponible' : 'No se pudo cargar el archivo' };
+      return URL.createObjectURL(await res.blob());
+    })();
+    this._attCache.set(id, p);
+    p.catch(() => this._attCache.delete(id));
+    return p;
   }
 
   // Chat estilo WhatsApp: editar (15 min), eliminar para mí / para todos (48 h), no leídos
@@ -453,10 +504,10 @@ class ApiClient {
     return (data && data.unread) || 0;
   }
 
-  async sendMessage(convId, content) {
+  async sendMessage(convId, content, replyTo = '') {
     return await this.request(`/chats/conversations/${convId}/messages`, {
       method: 'POST',
-      body: this.bodyv('chatMessage', { message_text: content })
+      body: this.bodyv('chatMessage', replyTo ? { message_text: content, reply_to_id: replyTo } : { message_text: content })
     });
   }
 
@@ -822,14 +873,18 @@ window.utils = {
       container.className = 'fixed bottom-4 right-4 z-[110] flex max-w-sm flex-col gap-2';
       document.body.appendChild(container);
     }
+    // Un mismo aviso no se apila: si ya está visible, se reinicia su tiempo
+    const dup = [...container.children].find(t => t.dataset.msg === String(message));
+    if (dup) { clearTimeout(dup._t); dup._t = setTimeout(() => dup.remove(), 4000); return; }
     const tone = { error: ['error', 'text-danger'], warning: ['warning', 'text-warning'] }[type] || ['check_circle', 'text-primary'];
     const toast = document.createElement('div');
     toast.className = 'toast';
+    toast.dataset.msg = String(message);
     toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
     toast.innerHTML = `<span class="icon icon-fill text-[18px] ${tone[1]}">${tone[0]}</span><span>${this.escapeHTML(message)}</span>`;
     container.appendChild(toast);
 
-    setTimeout(() => {
+    toast._t = setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transform = 'translateY(8px)';
       setTimeout(() => toast.remove(), 200);

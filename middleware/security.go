@@ -21,7 +21,7 @@ func ContentSecurityPolicy(production bool) string {
 		"font-src 'self' https://fonts.gstatic.com",
 		// Avatares y medios de las publicaciones son enlaces https externos elegidos por los usuarios
 		"img-src 'self' data: blob: https:",
-		"media-src 'self' https:",
+		"media-src 'self' https: blob:",
 		"connect-src 'self' https://www.google.com/recaptcha/",
 		"frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/",
 		"worker-src 'none'",

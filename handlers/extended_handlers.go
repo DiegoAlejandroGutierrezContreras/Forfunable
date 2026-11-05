@@ -662,3 +662,28 @@ func (h *ExtendedHandler) AdminDeleteUser(c *gin.Context) {
 	})
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "La cuenta de @" + user.Username + " fue eliminada"})
 }
+
+// MigrationStatus maneja GET /api/v1/admin/system/migrations: diagnóstico de las tablas nuevas.
+func (h *ExtendedHandler) MigrationStatus(c *gin.Context) {
+	if c.GetString("global_role") != models.RoleGlobalAdmin {
+		extError(c, errors.New("solo un administrador global puede ver el estado de la base de datos"), http.StatusForbidden)
+		return
+	}
+	c.JSON(http.StatusOK, h.ext.Status())
+}
+
+// RetryMigration maneja POST /api/v1/admin/system/migrate: vuelve a aplicar las migraciones
+// (p. ej. tras conceder permisos al usuario de la base de datos) sin redesplegar.
+func (h *ExtendedHandler) RetryMigration(c *gin.Context) {
+	if c.GetString("global_role") != models.RoleGlobalAdmin {
+		extError(c, errors.New("solo un administrador global puede reintentar la migración"), http.StatusForbidden)
+		return
+	}
+	_ = h.ext.Migrate()
+	st := h.ext.Status()
+	_ = h.repo.CreateModerationLog(&models.ModerationLog{
+		ModeratorID: c.GetString("user_id"), ActionType: "RUN_MIGRATIONS", TargetID: c.GetString("user_id"),
+		Reason: fmt.Sprintf("Migraciones reintentadas: core=%v chat=%v adjuntos=%v", st.Groups["core"], st.Groups["chat"], st.Groups["chat_media"]),
+	})
+	c.JSON(http.StatusOK, st)
+}

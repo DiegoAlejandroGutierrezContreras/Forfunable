@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"forfunable/models"
@@ -20,15 +22,46 @@ import (
 //go:embed sql/extended_schema.sql
 var extendedSchema string
 
-// ErrExtendedUnavailable indica que la migración V003 no pudo aplicarse (p. ej. por permisos).
-var ErrExtendedUnavailable = errors.New("funciones extendidas no disponibles: aplica database/migrations/V003__extended_features.sql")
+// ErrExtendedUnavailable indica que las tablas de una función no existen o no son accesibles
+// (normalmente por permisos del usuario de base de datos). El diagnóstico está en MigrationStatus.
+var ErrExtendedUnavailable = errors.New("esta función aún no está activa en el servidor: un administrador debe completar la migración de la base de datos (Consola de administración > Métricas > Estado de la base de datos)")
+
+// schemaGroups agrupa las tablas por función: cada grupo se activa por separado.
+var schemaGroups = []struct {
+	Name, Label string
+	Tables      []string
+}{
+	{"core", "Guardados, sesiones, historial, cuentas, acceso privado, apelaciones y flairs (V003)",
+		[]string{"user_sessions", "saved_collections", "saved_posts", "post_revisions", "account_deletions", "community_access_requests", "appeals", "community_flairs", "post_flairs"}},
+	{"chat", "Chat: entregado/leído, editar y eliminar (V004)", []string{"chat_message_state", "chat_message_hidden"}},
+	{"chat_media", "Chat: responder y adjuntos (V005)", []string{"chat_message_replies", "chat_attachments"}},
+}
+
+// MigrationStatus describe el resultado de la última migración (visible para administradores).
+type MigrationStatus struct {
+	DBUser    string            `json:"db_user"`
+	Groups    map[string]bool   `json:"groups"`
+	Labels    map[string]string `json:"labels"`
+	Missing   []string          `json:"missing_tables"`
+	NoAccess  []string          `json:"no_access_tables"`
+	Errors    []string          `json:"errors"`
+	FixSQL    string            `json:"fix_sql,omitempty"`
+	CheckedAt time.Time         `json:"checked_at"`
+}
+
+var createRe = regexp.MustCompile(`(?is)^CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX)\s+IF\s+NOT\s+EXISTS\s+([a-z0-9_]+)`)
 
 // ExtendedRepository implementa las funciones extendidas sobre PostgreSQL:
 // sesiones, guardados, revisiones, eliminación de cuenta, acceso privado, apelaciones y flairs.
 // Es independiente de Repository para no obligar a MemoryRepository (pruebas) a implementarlas.
 type ExtendedRepository struct {
 	db        *sql.DB
-	available bool
+	available atomic.Bool // grupo "core" (V003)
+	chatReady atomic.Bool // grupo "chat" (V004)
+	mediaOK   atomic.Bool // grupo "chat_media" (V005)
+
+	statusMu sync.Mutex
+	status   MigrationStatus
 
 	mu           sync.Mutex
 	sessionCache map[string]sessionCacheEntry
@@ -45,20 +78,121 @@ func NewExtendedRepository(p *PostgresRepository) *ExtendedRepository {
 	return &ExtendedRepository{db: p.db, sessionCache: map[string]sessionCacheEntry{}}
 }
 
-// Migrate aplica la migración V003 (idempotente). Si falla, las funciones extendidas quedan
-// desactivadas y el resto de la aplicación sigue funcionando.
+// Migrate aplica las migraciones V003+ sentencia por sentencia (idempotente): omite lo que ya
+// existe, sigue ante errores y activa cada grupo de funciones solo si sus tablas existen y el
+// usuario de la app puede usarlas. Se puede volver a ejecutar en caliente (Consola de administración).
 func (e *ExtendedRepository) Migrate() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	if _, err := e.db.ExecContext(ctx, extendedSchema); err != nil {
-		e.available = false
-		return err
+	st := MigrationStatus{Groups: map[string]bool{}, Labels: map[string]string{}, Missing: []string{}, NoAccess: []string{}, Errors: []string{}, CheckedAt: time.Now().UTC()}
+	_ = e.db.QueryRowContext(ctx, `SELECT current_user`).Scan(&st.DBUser)
+
+	exists := func(name string) bool {
+		var reg sql.NullString
+		_ = e.db.QueryRowContext(ctx, `SELECT to_regclass($1)::text`, "public."+name).Scan(&reg)
+		return reg.Valid
 	}
-	e.available = true
+	for _, raw := range strings.Split(stripSQLComments(extendedSchema), ";") {
+		stmt := strings.TrimSpace(raw)
+		if stmt == "" {
+			continue
+		}
+		if m := createRe.FindStringSubmatch(stmt); m != nil && exists(strings.ToLower(m[2])) {
+			continue // ya existe: no hace falta permiso de creación
+		}
+		if _, err := e.db.ExecContext(ctx, stmt); err != nil {
+			name := stmt
+			if m := createRe.FindStringSubmatch(stmt); m != nil {
+				name = m[2]
+			} else if len(name) > 60 {
+				name = name[:60] + "…"
+			}
+			st.Errors = append(st.Errors, fmt.Sprintf("%s: %v", name, err))
+			log.Printf("[WARN] Migración: %s: %v", name, err)
+		}
+	}
+
+	for _, g := range schemaGroups {
+		ok := true
+		for _, t := range g.Tables {
+			if !exists(t) {
+				st.Missing = append(st.Missing, t)
+				ok = false
+				continue
+			}
+			var priv bool
+			if err := e.db.QueryRowContext(ctx, `SELECT has_table_privilege(current_user, $1, 'SELECT, INSERT, UPDATE, DELETE')`, "public."+t).Scan(&priv); err != nil || !priv {
+				st.NoAccess = append(st.NoAccess, t)
+				ok = false
+			}
+		}
+		st.Groups[g.Name] = ok
+		st.Labels[g.Name] = g.Label
+	}
+	e.available.Store(st.Groups["core"])
+	e.chatReady.Store(st.Groups["chat"])
+	e.mediaOK.Store(st.Groups["chat"] && st.Groups["chat_media"])
+
+	if len(st.Missing)+len(st.NoAccess) > 0 {
+		u := pq.QuoteIdentifier(st.DBUser)
+		st.FixSQL = "-- Ejecutar como postgres (Cloud SQL Studio) y luego pulsar «Reintentar migración»\n" +
+			"GRANT USAGE, CREATE ON SCHEMA public TO " + u + ";\n" +
+			"GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA public TO " + u + ";\n" +
+			"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO " + u + ";"
+	}
+	e.statusMu.Lock()
+	e.status = st
+	e.statusMu.Unlock()
+
+	if !st.Groups["core"] {
+		if len(st.Errors) > 0 {
+			return errors.New(st.Errors[0])
+		}
+		return ErrExtendedUnavailable
+	}
 	return nil
 }
 
-func (e *ExtendedRepository) Available() bool { return e != nil && e.available }
+// Status devuelve una copia del diagnóstico de la última migración.
+func (e *ExtendedRepository) Status() MigrationStatus {
+	e.statusMu.Lock()
+	defer e.statusMu.Unlock()
+	return e.status
+}
+
+func stripSQLComments(s string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(s, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "--") {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func (e *ExtendedRepository) Available() bool { return e != nil && e.available.Load() }
+
+// ChatReady: entregado/leído, editar y eliminar mensajes (V004)
+func (e *ExtendedRepository) ChatReady() bool { return e != nil && e.chatReady.Load() }
+
+// MediaReady: responder y adjuntos (V005)
+func (e *ExtendedRepository) MediaReady() bool { return e != nil && e.mediaOK.Load() }
+
+func (e *ExtendedRepository) chatGuard() error {
+	if !e.ChatReady() {
+		return ErrExtendedUnavailable
+	}
+	return nil
+}
+
+func (e *ExtendedRepository) mediaGuard() error {
+	if !e.MediaReady() {
+		return ErrExtendedUnavailable
+	}
+	return nil
+}
 
 func (e *ExtendedRepository) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), 10*time.Second)
@@ -1072,7 +1206,7 @@ func chatStatus(delivered, read *time.Time) string {
 // ListChatMessages devuelve los últimos `limit` mensajes en orden cronológico, sin los que el
 // lector eliminó para sí. Los eliminados para todos llegan sin texto y con Deleted=true.
 func (e *ExtendedRepository) ListChatMessages(convID, viewerID string, limit int) ([]*models.ChatMessage, error) {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return nil, err
 	}
 	if limit <= 0 || limit > 500 {
@@ -1080,12 +1214,25 @@ func (e *ExtendedRepository) ListChatMessages(convID, viewerID string, limit int
 	}
 	ctx, cancel := e.ctx()
 	defer cancel()
+	media := e.MediaReady()
+	extraCols, extraJoins := `, NULL::text, NULL::text, NULL::text, NULL::timestamptz, NULL::text, NULL::text,
+		         NULL::text, NULL::text, NULL::text, NULL::text, NULL::int`, ``
+	if media {
+		extraCols = `, rp.reply_to_id::text, rm.sender_id::text, rm.message_text, rs.deleted_at, ra.kind, ra.filename,
+		         a.id::text, a.kind, a.filename, a.mime_type, a.size_bytes`
+		extraJoins = `
+		  LEFT JOIN chat_message_replies rp ON rp.message_id = m.id
+		  LEFT JOIN chat_messages rm ON rm.id = rp.reply_to_id
+		  LEFT JOIN chat_message_state rs ON rs.message_id = rm.id
+		  LEFT JOIN LATERAL (SELECT kind, filename FROM chat_attachments WHERE message_id = rm.id LIMIT 1) ra ON TRUE
+		  LEFT JOIN LATERAL (SELECT id, kind, filename, mime_type, size_bytes FROM chat_attachments WHERE message_id = m.id LIMIT 1) a ON TRUE`
+	}
 	rows, err := e.db.QueryContext(ctx, `
 		SELECT * FROM (
 		  SELECT m.id, m.conversation_id, m.sender_id, m.message_text, COALESCE(m.attachment_url, ''), m.created_at,
-		         s.delivered_at, s.read_at, s.edited_at, s.deleted_at
+		         s.delivered_at, s.read_at, s.edited_at, s.deleted_at`+extraCols+`
 		  FROM chat_messages m
-		  LEFT JOIN chat_message_state s ON s.message_id = m.id
+		  LEFT JOIN chat_message_state s ON s.message_id = m.id`+extraJoins+`
 		  WHERE m.conversation_id = $1
 		    AND NOT EXISTS (SELECT 1 FROM chat_message_hidden h WHERE h.message_id = m.id AND h.user_id = $2)
 		  ORDER BY m.created_at DESC
@@ -1098,13 +1245,30 @@ func (e *ExtendedRepository) ListChatMessages(convID, viewerID string, limit int
 	out := []*models.ChatMessage{}
 	for rows.Next() {
 		m := &models.ChatMessage{}
-		var deleted *time.Time
+		var deleted, replyDeleted *time.Time
+		var replyID, replySender, replyText, replyKind, replyName, attID, attKind, attName, attMime sql.NullString
+		var attSize sql.NullInt64
 		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.MessageText, &m.AttachmentURL, &m.CreatedAt,
-			&m.DeliveredAt, &m.ReadAt, &m.EditedAt, &deleted); err != nil {
+			&m.DeliveredAt, &m.ReadAt, &m.EditedAt, &deleted,
+			&replyID, &replySender, &replyText, &replyDeleted, &replyKind, &replyName,
+			&attID, &attKind, &attName, &attMime, &attSize); err != nil {
 			return nil, err
 		}
+		m.AttachmentURL = ""
+		if replyID.Valid {
+			ref := &models.ChatReplyRef{ID: replyID.String, SenderID: replySender.String, AttachmentKind: replyKind.String, AttachmentName: replyName.String}
+			if replyDeleted != nil {
+				ref.Deleted, ref.AttachmentKind, ref.AttachmentName = true, "", ""
+			} else {
+				ref.Text = truncateRunes(replyText.String, 160)
+			}
+			m.ReplyTo = ref
+		}
+		if attID.Valid {
+			m.Attachment = &models.ChatAttachmentMeta{ID: attID.String, Kind: attKind.String, Filename: attName.String, MimeType: attMime.String, Size: int(attSize.Int64)}
+		}
 		if deleted != nil {
-			m.Deleted, m.MessageText, m.AttachmentURL, m.EditedAt = true, "", "", nil
+			m.Deleted, m.MessageText, m.AttachmentURL, m.EditedAt, m.Attachment, m.ReplyTo = true, "", "", nil, nil, nil
 		}
 		if m.SenderID == viewerID {
 			m.Status = chatStatus(m.DeliveredAt, m.ReadAt)
@@ -1118,7 +1282,7 @@ func (e *ExtendedRepository) ListChatMessages(convID, viewerID string, limit int
 
 // MarkChatRead marca como entregados y leídos los mensajes recibidos en una conversación.
 func (e *ExtendedRepository) MarkChatRead(convID, readerID string) error {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return err
 	}
 	ctx, cancel := e.ctx()
@@ -1137,7 +1301,7 @@ func (e *ExtendedRepository) MarkChatRead(convID, readerID string) error {
 // MarkChatDelivered marca como entregados todos los mensajes que el usuario aún no había recibido
 // (se llama cuando su app consulta la bandeja o los contadores, es decir, cuando está conectado).
 func (e *ExtendedRepository) MarkChatDelivered(userID string) error {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return err
 	}
 	ctx, cancel := e.ctx()
@@ -1154,7 +1318,7 @@ func (e *ExtendedRepository) MarkChatDelivered(userID string) error {
 
 // UnreadChatCount cuenta los mensajes recibidos sin leer (sin los eliminados ni ocultos).
 func (e *ExtendedRepository) UnreadChatCount(userID string) (int, error) {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return 0, err
 	}
 	ctx, cancel := e.ctx()
@@ -1172,14 +1336,18 @@ func (e *ExtendedRepository) UnreadChatCount(userID string) (int, error) {
 
 // ListChatConversations: bandeja con último mensaje visible, sus marcas y los no leídos.
 func (e *ExtendedRepository) ListChatConversations(userID string) ([]*models.ChatConversation, error) {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return nil, err
 	}
 	ctx, cancel := e.ctx()
 	defer cancel()
+	attCols := `NULL::text, NULL::text`
+	if e.MediaReady() {
+		attCols = `(SELECT kind FROM chat_attachments WHERE message_id = lm.id LIMIT 1), (SELECT filename FROM chat_attachments WHERE message_id = lm.id LIMIT 1)`
+	}
 	rows, err := e.db.QueryContext(ctx, `
 		SELECT c.id, c.user1_id, c.user2_id, u.username, c.created_at, c.updated_at,
-		       lm.sender_id, COALESCE(lm.message_text, ''), lm.created_at, ls.delivered_at, ls.read_at, ls.deleted_at,
+		       lm.sender_id, COALESCE(lm.message_text, ''), lm.created_at, ls.delivered_at, ls.read_at, ls.deleted_at, `+attCols+`,
 		       (SELECT COUNT(*) FROM chat_messages m2
 		          LEFT JOIN chat_message_state s2 ON s2.message_id = m2.id
 		         WHERE m2.conversation_id = c.id AND m2.sender_id <> $1 AND s2.read_at IS NULL AND s2.deleted_at IS NULL
@@ -1202,10 +1370,10 @@ func (e *ExtendedRepository) ListChatConversations(userID string) ([]*models.Cha
 	out := []*models.ChatConversation{}
 	for rows.Next() {
 		c := &models.ChatConversation{}
-		var sender sql.NullString
+		var sender, attKind, attName sql.NullString
 		var delivered, read, deleted *time.Time
 		if err := rows.Scan(&c.ID, &c.User1ID, &c.User2ID, &c.OtherUsername, &c.CreatedAt, &c.UpdatedAt,
-			&sender, &c.LastMessage, &c.LastMessageAt, &delivered, &read, &deleted, &c.UnreadCount); err != nil {
+			&sender, &c.LastMessage, &c.LastMessageAt, &delivered, &read, &deleted, &attKind, &attName, &c.UnreadCount); err != nil {
 			return nil, err
 		}
 		if sender.Valid {
@@ -1213,8 +1381,9 @@ func (e *ExtendedRepository) ListChatConversations(userID string) ([]*models.Cha
 			if c.LastMessageMine {
 				c.LastMessageStatus = chatStatus(delivered, read)
 			}
+			c.LastAttachment, c.LastAttachName = attKind.String, attName.String
 			if deleted != nil {
-				c.LastMessageGone, c.LastMessage = true, ""
+				c.LastMessageGone, c.LastMessage, c.LastAttachment, c.LastAttachName = true, "", "", ""
 			}
 		}
 		out = append(out, c)
@@ -1230,7 +1399,7 @@ type ChatMessageRef struct {
 }
 
 func (e *ExtendedRepository) GetChatMessageRef(id string) (*ChatMessageRef, error) {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return nil, err
 	}
 	ctx, cancel := e.ctx()
@@ -1251,7 +1420,7 @@ func (e *ExtendedRepository) GetChatMessageRef(id string) (*ChatMessageRef, erro
 }
 
 func (e *ExtendedRepository) EditChatMessage(id, text string) (time.Time, error) {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return time.Time{}, err
 	}
 	ctx, cancel := e.ctx()
@@ -1276,7 +1445,7 @@ func (e *ExtendedRepository) EditChatMessage(id, text string) (time.Time, error)
 
 // DeleteChatMessageForAll borra el contenido para ambos participantes y deja la marca "eliminado".
 func (e *ExtendedRepository) DeleteChatMessageForAll(id string) error {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return err
 	}
 	ctx, cancel := e.ctx()
@@ -1289,6 +1458,11 @@ func (e *ExtendedRepository) DeleteChatMessageForAll(id string) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE chat_messages SET message_text = '', attachment_url = NULL WHERE id = $1`, id); err != nil {
 		return err
 	}
+	if e.MediaReady() {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM chat_attachments WHERE message_id = $1`, id); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO chat_message_state (message_id, deleted_at) VALUES ($1, NOW())
 		ON CONFLICT (message_id) DO UPDATE SET deleted_at = NOW()`, id); err != nil {
@@ -1299,11 +1473,105 @@ func (e *ExtendedRepository) DeleteChatMessageForAll(id string) error {
 
 // HideChatMessage implementa "eliminar para mí".
 func (e *ExtendedRepository) HideChatMessage(id, userID string) error {
-	if err := e.guard(); err != nil {
+	if err := e.chatGuard(); err != nil {
 		return err
 	}
 	ctx, cancel := e.ctx()
 	defer cancel()
 	_, err := e.db.ExecContext(ctx, `INSERT INTO chat_message_hidden (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, id, userID)
 	return err
+}
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+// --- Chat: responder y adjuntos (V005) ---
+
+// SetReply enlaza un mensaje con el que responde; ambos deben ser de la misma conversación.
+func (e *ExtendedRepository) SetReply(messageID, replyToID, convID string) error {
+	if err := e.mediaGuard(); err != nil {
+		return err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	res, err := e.db.ExecContext(ctx, `
+		INSERT INTO chat_message_replies (message_id, reply_to_id)
+		SELECT $1, m.id FROM chat_messages m WHERE m.id = $2 AND m.conversation_id = $3
+		ON CONFLICT (message_id) DO NOTHING`, messageID, replyToID, convID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errors.New("el mensaje al que respondes no existe en esta conversación")
+	}
+	return nil
+}
+
+// ReplyTargetOK comprueba que el mensaje citado pertenece a la conversación.
+func (e *ExtendedRepository) ReplyTargetOK(replyToID, convID string) bool {
+	if e.mediaGuard() != nil {
+		return false
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	var ok bool
+	_ = e.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM chat_messages WHERE id::text = $1 AND conversation_id = $2)`, replyToID, convID).Scan(&ok)
+	return ok
+}
+
+// SaveAttachment guarda el archivo y lo vincula al mensaje.
+func (e *ExtendedRepository) SaveAttachment(messageID, uploaderID, kind, filename, mime string, data []byte) (*models.ChatAttachmentMeta, error) {
+	if err := e.mediaGuard(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	meta := &models.ChatAttachmentMeta{Kind: kind, Filename: filename, MimeType: mime, Size: len(data)}
+	err := e.db.QueryRowContext(ctx, `
+		INSERT INTO chat_attachments (message_id, uploader_id, kind, filename, mime_type, size_bytes, data)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		messageID, uploaderID, kind, filename, mime, len(data), data).Scan(&meta.ID)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = e.db.ExecContext(ctx, `UPDATE chat_messages SET attachment_url = $2 WHERE id = $1`, messageID, "att:"+meta.ID)
+	return meta, nil
+}
+
+// DeleteChatMessageHard borra un mensaje recién creado si falló la subida de su adjunto.
+func (e *ExtendedRepository) DeleteChatMessageHard(id string) {
+	ctx, cancel := e.ctx()
+	defer cancel()
+	_, _ = e.db.ExecContext(ctx, `DELETE FROM chat_messages WHERE id = $1`, id)
+}
+
+// AttachmentFile es un adjunto con su contenido y los participantes autorizados.
+type AttachmentFile struct {
+	models.ChatAttachmentMeta
+	Data             []byte
+	User1ID, User2ID string
+}
+
+func (e *ExtendedRepository) GetAttachment(id string) (*AttachmentFile, error) {
+	if err := e.mediaGuard(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	f := &AttachmentFile{}
+	err := e.db.QueryRowContext(ctx, `
+		SELECT a.id, a.kind, a.filename, a.mime_type, a.size_bytes, a.data, c.user1_id, c.user2_id
+		FROM chat_attachments a
+		JOIN chat_messages m ON m.id = a.message_id
+		JOIN chat_conversations c ON c.id = m.conversation_id
+		WHERE a.id::text = $1`, id).Scan(&f.ID, &f.Kind, &f.Filename, &f.MimeType, &f.Size, &f.Data, &f.User1ID, &f.User2ID)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("archivo no encontrado")
+	}
+	return f, err
 }

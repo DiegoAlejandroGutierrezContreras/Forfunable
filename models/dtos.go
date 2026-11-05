@@ -136,6 +136,7 @@ type UpdateChatActionRequest struct {
 type SendChatMessageRequest struct {
 	MessageText   string `json:"message_text" binding:"required"`
 	AttachmentURL string `json:"attachment_url"`
+	ReplyToID     string `json:"reply_to_id"` // responder a un mensaje de la misma conversación (V005)
 }
 
 type BlockUserRequest struct {

@@ -162,6 +162,8 @@ type ChatConversation struct {
 	LastMessageMine   bool       `json:"last_message_mine,omitempty"`
 	LastMessageStatus string     `json:"last_message_status,omitempty"` // sent | delivered | read
 	LastMessageGone   bool       `json:"last_message_deleted,omitempty"`
+	LastAttachment    string     `json:"last_attachment_kind,omitempty"`
+	LastAttachName    string     `json:"last_attachment_name,omitempty"`
 }
 
 // ChatMessage representa un mensaje dentro de una conversación
@@ -178,6 +180,28 @@ type ChatMessage struct {
 	ReadAt      *time.Time `json:"read_at,omitempty"`
 	EditedAt    *time.Time `json:"edited_at,omitempty"`
 	Deleted     bool       `json:"deleted,omitempty"` // eliminado para todos
+	// Respuesta y adjunto (migración V005)
+	ReplyTo    *ChatReplyRef       `json:"reply_to,omitempty"`
+	Attachment *ChatAttachmentMeta `json:"attachment,omitempty"`
+}
+
+// ChatReplyRef es la cita del mensaje al que se responde
+type ChatReplyRef struct {
+	ID             string `json:"id"`
+	SenderID       string `json:"sender_id"`
+	Text           string `json:"text"`
+	Deleted        bool   `json:"deleted,omitempty"`
+	AttachmentKind string `json:"attachment_kind,omitempty"`
+	AttachmentName string `json:"attachment_name,omitempty"`
+}
+
+// ChatAttachmentMeta describe un archivo adjunto (el contenido se descarga aparte)
+type ChatAttachmentMeta struct {
+	ID       string `json:"id"`
+	Kind     string `json:"kind"` // image | gif | video | audio | file
+	Filename string `json:"filename"`
+	MimeType string `json:"mime_type"`
+	Size     int    `json:"size"`
 }
 
 // UserBlock representa el bloqueo mutuo entre dos usuarios

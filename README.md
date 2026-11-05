@@ -51,7 +51,7 @@ Forfunable/
 ├── database/
 │   ├── schema.sql              # DDL PostgreSQL con ltree, pgcrypto, FKs, CHECKs e índices GiST
 │   ├── seeds.sql               # Datos iniciales con contraseñas BCrypt reales (Password123!)
-│   └── migrations/             # Migraciones versionadas (V001__schema, V002__seeds, V003__extended_features y V004__chat_message_state: se aplican solas al arrancar)
+│   └── migrations/             # Migraciones versionadas (V001__schema, V002__seeds, V003-V005 se aplican solas al arrancar; si faltan permisos, ver grant_app_user.sql)
 ├── models/
 │   ├── models.go               # Entidades de dominio
 │   └── dtos.go                 # Data Transfer Objects (DTOs) con validaciones Gin
