@@ -80,6 +80,7 @@ type CreatePostRequest struct {
 	ContentType string `json:"content_type" binding:"required,oneof=TEXT IMAGE VIDEO LINK"`
 	BodyText    string `json:"body_text"`
 	MediaURL    string `json:"media_url"`
+	FlairID     string `json:"flair_id"`
 }
 
 type UpdatePostRequest struct {

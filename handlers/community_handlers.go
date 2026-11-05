@@ -17,6 +17,8 @@ var communityNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 type CommunityHandler struct {
 	repo repository.Repository
+	// Ext habilita las solicitudes de acceso a comunidades privadas (nil en las pruebas)
+	Ext *repository.ExtendedRepository
 }
 
 func NewCommunityHandler(repo repository.Repository) *CommunityHandler {
@@ -163,6 +165,25 @@ func (h *CommunityHandler) JoinCommunity(c *gin.Context) {
 			Error:   "BANNED",
 			Message: "Has sido sancionado en esta comunidad",
 		})
+		return
+	}
+
+	// 06_79 Comunidad privada: unirse crea una solicitud que la moderación aprueba o rechaza
+	if comm, err := h.repo.GetCommunityByID(commID); err == nil && comm.IsPrivate && h.Ext.Available() && !canManageCommunity(h.repo, c, comm) {
+		if member, _ := h.repo.IsCommunityMember(comm.ID, userID); member {
+			c.JSON(http.StatusConflict, models.ErrorResponse{Error: "CONFLICT", Message: "ya es miembro de la comunidad"})
+			return
+		}
+		var body models.AccessRequestCreate
+		_ = c.ShouldBindJSON(&body)
+		ar, err := h.Ext.CreateAccessRequest(comm.ID, userID, middleware.SanitizeText(body.Message))
+		if err != nil {
+			c.JSON(http.StatusConflict, models.ErrorResponse{Error: "CONFLICT", Message: err.Error()})
+			return
+		}
+		notify(h.repo, comm.CreatorID, userID, "Solicitud de acceso",
+			"u/"+c.GetString("username")+" pidió unirse a c/"+comm.Name, notifCommunity(comm.Name))
+		c.JSON(http.StatusAccepted, gin.H{"status": "PENDING", "request": ar, "message": "Solicitud enviada a la moderación"})
 		return
 	}
 

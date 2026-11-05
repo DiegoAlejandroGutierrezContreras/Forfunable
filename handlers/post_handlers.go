@@ -18,6 +18,8 @@ type PostHandler struct {
 	storageSigner services.MediaSigner
 	storageBucket string
 	signedURLTTL  time.Duration
+	// Ext habilita historial de versiones y flairs (nil en las pruebas)
+	Ext *repository.ExtendedRepository
 }
 
 func NewPostHandler(repo repository.Repository, signer services.MediaSigner, bucket string) *PostHandler {
@@ -57,7 +59,15 @@ func (h *PostHandler) ListPosts(c *gin.Context) {
 		return
 	}
 
+	if communityID != "" && h.Ext.Available() {
+		if comm, err := h.repo.GetCommunityByID(communityID); err == nil && !canViewCommunity(h.repo, h.Ext, c, comm) {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "PRIVATE_COMMUNITY", Message: "Esta comunidad es privada: solicita acceso para ver sus publicaciones"})
+			return
+		}
+	}
+	posts = visiblePosts(h.repo, h.Ext, c, posts)
 	attachPostVotes(h.repo, c.GetString("user_id"), posts...)
+	attachPostFlairs(h.Ext, posts...)
 
 	c.JSON(http.StatusOK, gin.H{
 		"items": posts,
@@ -103,12 +113,27 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		MediaURL:    req.MediaURL,
 	}
 
+	if req.FlairID != "" && h.Ext.Available() {
+		manager := false
+		if comm, err := h.repo.GetCommunityByID(req.CommunityID); err == nil {
+			manager = canManageCommunity(h.repo, c, comm)
+		}
+		if err := validatePostFlair(h.Ext, req.FlairID, req.CommunityID, manager); err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "BAD_REQUEST", Message: err.Error()})
+			return
+		}
+	}
+
 	if err := h.repo.CreatePost(post); err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
 			Message: "No se pudo registrar la publicación: " + err.Error(),
 		})
 		return
+	}
+
+	if req.FlairID != "" && h.Ext.Available() && h.Ext.SetPostFlair(post.ID, req.FlairID) == nil {
+		attachPostFlairs(h.Ext, post)
 	}
 
 	c.JSON(http.StatusCreated, post)
@@ -125,8 +150,13 @@ func (h *PostHandler) GetPostDetail(c *gin.Context) {
 		})
 		return
 	}
+	if comm, err := h.repo.GetCommunityByID(post.CommunityID); err == nil && !canViewCommunity(h.repo, h.Ext, c, comm) {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "PRIVATE_COMMUNITY", Message: "Esta publicación pertenece a una comunidad privada: c/" + comm.Name})
+		return
+	}
 
 	attachPostVotes(h.repo, c.GetString("user_id"), post)
+	attachPostFlairs(h.Ext, post)
 
 	c.JSON(http.StatusOK, post)
 }
@@ -164,6 +194,10 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 	}
 
 	req.BodyText = middleware.SanitizeText(req.BodyText)
+	// 03_22 Historial de versiones: se conserva el texto anterior a cada edición
+	if h.Ext.Available() && req.BodyText != post.BodyText {
+		_ = h.Ext.AddRevision(post.ID, post.BodyText, userID)
+	}
 	updated, err := h.repo.UpdatePost(postID, req.BodyText)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{

@@ -14,6 +14,9 @@ const (
 
 func notifPost(postID string) string { return "post:" + postID }
 
+// notifRemoved marca un aviso de publicación retirada; permite restaurarla si se acepta la apelación
+func notifRemoved(postID string) string { return "removed:" + postID }
+
 func notifCommunity(name string) string {
 	// notifications.type es VARCHAR(50)
 	if len("c:"+name) > 50 {

@@ -12,6 +12,7 @@ import (
 
 type CommentHandler struct {
 	repo repository.Repository
+	Ext  *repository.ExtendedRepository // opcional: oculta comentarios de comunidades privadas
 }
 
 func NewCommentHandler(repo repository.Repository) *CommentHandler {
@@ -26,11 +27,16 @@ func (h *CommentHandler) ListComments(c *gin.Context) {
 	maxDepth, _ := strconv.Atoi(c.DefaultQuery("max_depth", "0"))
 
 	// Validar que el post exista
-	if _, err := h.repo.GetPostByID(postID); err != nil {
+	post, err := h.repo.GetPostByID(postID)
+	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{
 			Error:   "NOT_FOUND",
 			Message: "Publicación no encontrada",
 		})
+		return
+	}
+	if comm, err := h.repo.GetCommunityByID(post.CommunityID); err == nil && !canViewCommunity(h.repo, h.Ext, c, comm) {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "PRIVATE_COMMUNITY", Message: "Esta publicación pertenece a una comunidad privada"})
 		return
 	}
 

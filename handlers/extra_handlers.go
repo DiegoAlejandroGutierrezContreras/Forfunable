@@ -12,6 +12,7 @@ import (
 
 type ExtraHandler struct {
 	repo repository.Repository
+	Ext  *repository.ExtendedRepository // opcional: oculta contenido de comunidades privadas
 }
 
 func NewExtraHandler(repo repository.Repository) *ExtraHandler {
@@ -201,7 +202,9 @@ func (h *ExtraHandler) RecommendationsFeed(c *gin.Context) {
 		return
 	}
 
+	posts = visiblePosts(h.repo, h.Ext, c, posts)
 	attachPostVotes(h.repo, c.GetString("user_id"), posts...)
+	attachPostFlairs(h.Ext, posts...)
 
 	c.JSON(http.StatusOK, gin.H{
 		"algorithm":   "Hot Ranking Decay (G=1.8)",

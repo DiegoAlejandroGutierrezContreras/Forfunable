@@ -204,7 +204,7 @@ func (h *AdminHandler) ResolveReport(c *gin.Context) {
 			if post, err := h.repo.GetPostByID(report.TargetID); err == nil && h.repo.RemovePostByAdmin(post.ID) == nil {
 				removed = true
 				notify(h.repo, post.AuthorID, moderatorID, "Contenido retirado",
-					"Tu publicación «"+post.Title+"» fue retirada por moderación ("+report.ReasonCode+")", notifAccount)
+					"Tu publicación «"+post.Title+"» fue retirada por moderación ("+report.ReasonCode+")", notifRemoved(post.ID))
 			}
 		case "COMMENT":
 			if cm, err := h.repo.GetCommentByID(report.TargetID); err == nil && h.repo.DeleteComment(cm.ID) == nil {
@@ -339,7 +339,7 @@ func (h *AdminHandler) AdminRemoveContent(c *gin.Context) {
 	var authorID, kind, link string
 	if post, err := h.repo.GetPostByID(targetID); err == nil {
 		if err := h.repo.RemovePostByAdmin(post.ID); err == nil {
-			authorID, kind, link = post.AuthorID, "POST", notifAccount
+			authorID, kind, link = post.AuthorID, "POST", notifRemoved(post.ID)
 		}
 	} else if cm, err := h.repo.GetCommentByID(targetID); err == nil {
 		if err := h.repo.DeleteComment(cm.ID); err == nil {

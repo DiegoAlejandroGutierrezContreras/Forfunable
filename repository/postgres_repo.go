@@ -271,7 +271,7 @@ func (p *PostgresRepository) ListCommunityBans(communityID string) ([]*models.Co
 		return nil, fmt.Errorf("error al listar sanciones: %w", err)
 	}
 	defer rows.Close()
-	var bans []*models.CommunityBan
+	bans := []*models.CommunityBan{}
 	for rows.Next() {
 		b := &models.CommunityBan{}
 		if err := rows.Scan(&b.UserID, &b.Username, &b.CommunityID, &b.Reason, &b.ExpiresAt, &b.CreatedAt); err != nil {

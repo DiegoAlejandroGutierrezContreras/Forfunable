@@ -15,12 +15,26 @@ type JWTClaims struct {
 	UserID     string `json:"user_id"`
 	Username   string `json:"username"`
 	GlobalRole string `json:"global_role"`
-	TokenType  string `json:"token_type"` // "access" o "refresh"
+	TokenType  string `json:"token_type"`    // "access" o "refresh"
+	SessionID  string `json:"sid,omitempty"` // sesión del dispositivo (user_sessions)
 	jwt.RegisteredClaims
+}
+
+// SessionValidator, si está definido, rechaza tokens cuya sesión fue revocada
+// (Sesiones activas → cerrar sesión). Lo configura main con el repositorio extendido.
+var SessionValidator func(sessionID string) bool
+
+func sessionRevoked(claims *JWTClaims) bool {
+	return claims.SessionID != "" && SessionValidator != nil && !SessionValidator(claims.SessionID)
 }
 
 // GenerateTokens crea el par de tokens (Access y Refresh)
 func GenerateTokens(userID, username, globalRole string, accessTTL, refreshTTL time.Duration, secret string) (string, string, error) {
+	return GenerateSessionTokens(userID, username, globalRole, "", accessTTL, refreshTTL, secret)
+}
+
+// GenerateSessionTokens crea el par de tokens asociado a una sesión de dispositivo.
+func GenerateSessionTokens(userID, username, globalRole, sessionID string, accessTTL, refreshTTL time.Duration, secret string) (string, string, error) {
 	now := time.Now()
 
 	// 1. Access Token
@@ -29,6 +43,7 @@ func GenerateTokens(userID, username, globalRole string, accessTTL, refreshTTL t
 		Username:   username,
 		GlobalRole: globalRole,
 		TokenType:  "access",
+		SessionID:  sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(accessTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -49,6 +64,7 @@ func GenerateTokens(userID, username, globalRole string, accessTTL, refreshTTL t
 		Username:   username,
 		GlobalRole: globalRole,
 		TokenType:  "refresh",
+		SessionID:  sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -122,7 +138,15 @@ func AuthRequired(secret string) gin.HandlerFunc {
 			})
 			return
 		}
+		if sessionRevoked(claims) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, models.ErrorResponse{
+				Error:   "SESSION_REVOKED",
+				Message: "La sesión de este dispositivo fue cerrada",
+			})
+			return
+		}
 
+		c.Set("session_id", claims.SessionID)
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("global_role", claims.GlobalRole)
@@ -137,7 +161,8 @@ func OptionalAuth(secret string) gin.HandlerFunc {
 		if authHeader != "" {
 			parts := strings.Split(authHeader, " ")
 			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-				if claims, err := ParseAndValidateToken(parts[1], secret); err == nil && claims.TokenType == "access" {
+				if claims, err := ParseAndValidateToken(parts[1], secret); err == nil && claims.TokenType == "access" && !sessionRevoked(claims) {
+					c.Set("session_id", claims.SessionID)
 					c.Set("user_id", claims.UserID)
 					c.Set("username", claims.Username)
 					c.Set("global_role", claims.GlobalRole)

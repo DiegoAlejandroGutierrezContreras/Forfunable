@@ -111,6 +111,32 @@ func main() {
 	extraHandler := handlers.NewExtraHandler(pgRepo)
 	adminHandler := handlers.NewAdminHandler(pgRepo)
 
+	// --- Funciones extendidas (migración V003: tablas nuevas, idempotente) ---
+	extRepo := repository.NewExtendedRepository(pgRepo)
+	if err := extRepo.Migrate(); err != nil {
+		log.Printf("[WARN] Funciones extendidas desactivadas (guardados, sesiones, apelaciones…): %v. Aplica database/migrations/V003__extended_features.sql con un usuario propietario.", err)
+	} else {
+		log.Println("[OK] Funciones extendidas activas (migración V003)")
+		middleware.SessionValidator = extRepo.SessionActive
+		// Anonimiza cada hora las cuentas cuyo periodo de gracia de eliminación venció
+		go func() {
+			for {
+				if n, err := extRepo.PurgeDueDeletions(); err != nil {
+					log.Printf("[WARN] Purga de cuentas: %v", err)
+				} else if n > 0 {
+					log.Printf("[INFO] %d cuentas eliminadas tras su periodo de gracia", n)
+				}
+				time.Sleep(time.Hour)
+			}
+		}()
+	}
+	authHandler.Ext = extRepo
+	postHandler.Ext = extRepo
+	commHandler.Ext = extRepo
+	extraHandler.Ext = extRepo
+	commentHandler.Ext = extRepo
+	extHandler := handlers.NewExtendedHandler(pgRepo, extRepo)
+
 	// ==========================================
 	// 1. ENDPOINTS DE CLIENTE FINAL (/api/v1/)
 	// ==========================================
@@ -131,6 +157,26 @@ func main() {
 			usersAuth.Use(middleware.AuthRequired(cfg.JWTSecret))
 			{
 				usersAuth.GET("/me", authHandler.GetMe)
+				// Sesiones activas, exportación y eliminación de cuenta
+				usersAuth.GET("/me/sessions", authHandler.ListSessions)
+				usersAuth.DELETE("/me/sessions/:id", authHandler.RevokeSession)
+				usersAuth.POST("/me/sessions/revoke-others", authHandler.RevokeOtherSessions)
+				usersAuth.GET("/me/export", authHandler.ExportData)
+				usersAuth.GET("/me/deletion", authHandler.GetDeletion)
+				usersAuth.POST("/me/deletion", authHandler.RequestDeletion)
+				usersAuth.DELETE("/me/deletion", authHandler.CancelDeletion)
+				// Guardados, solicitudes de acceso, sanciones y apelaciones propias
+				usersAuth.GET("/me/saved", extHandler.ListSaved)
+				usersAuth.GET("/me/saved/ids", extHandler.SavedIDs)
+				usersAuth.PUT("/me/saved/:postId", extHandler.SavePost)
+				usersAuth.DELETE("/me/saved/:postId", extHandler.UnsavePost)
+				usersAuth.GET("/me/collections", extHandler.ListCollections)
+				usersAuth.POST("/me/collections", extHandler.CreateCollection)
+				usersAuth.PATCH("/me/collections/:id", extHandler.UpdateCollection)
+				usersAuth.DELETE("/me/collections/:id", extHandler.DeleteCollection)
+				usersAuth.GET("/me/access-requests", extHandler.MyAccessRequests)
+				usersAuth.GET("/me/sanctions", extHandler.ListSanctions)
+				usersAuth.GET("/me/appeals", extHandler.MyAppeals)
 				usersAuth.PATCH("/me/profile", authHandler.UpdateProfile)
 				usersAuth.PATCH("/me/status", authHandler.UpdateStatus)
 				usersAuth.PATCH("/me/password", authHandler.ChangePassword)
@@ -147,12 +193,19 @@ func main() {
 		{
 			communities.GET("", commHandler.ListCommunities)
 			communities.GET("/:name", middleware.OptionalAuth(cfg.JWTSecret), commHandler.GetCommunityDetail)
+			communities.GET("/:name/flairs", middleware.OptionalAuth(cfg.JWTSecret), extHandler.ListFlairs)
 
 			commAuth := communities.Group("")
 			commAuth.Use(middleware.AuthRequired(cfg.JWTSecret))
 			{
 				commAuth.POST("", middleware.RequireRecaptcha(recaptchaVerifier, services.RecaptchaActionCreateCommunity), commHandler.CreateCommunity)
 				commAuth.POST("/:id/join", commHandler.JoinCommunity)
+				commAuth.POST("/:id/flairs", extHandler.CreateFlair)
+				commAuth.PATCH("/:id/flairs/:fid", extHandler.UpdateFlair)
+				commAuth.DELETE("/:id/flairs/:fid", extHandler.DeleteFlair)
+				commAuth.GET("/:name/access-requests", extHandler.ListAccessRequests)
+				commAuth.PATCH("/:id/access-requests/:rid", extHandler.DecideAccessRequest)
+				commAuth.POST("/:id/transfer", extHandler.TransferOwnership)
 				commAuth.DELETE("/:id/leave", commHandler.LeaveCommunity)
 			}
 		}
@@ -164,6 +217,7 @@ func main() {
 			posts.GET("", middleware.OptionalAuth(cfg.JWTSecret), postHandler.ListPosts)
 			posts.GET("/:id", middleware.OptionalAuth(cfg.JWTSecret), postHandler.GetPostDetail)
 			posts.GET("/:id/comments", middleware.OptionalAuth(cfg.JWTSecret), commentHandler.ListComments)
+			posts.GET("/:id/revisions", middleware.OptionalAuth(cfg.JWTSecret), extHandler.ListRevisions)
 
 			postsAuth := posts.Group("")
 			postsAuth.Use(middleware.AuthRequired(cfg.JWTSecret))
@@ -172,6 +226,7 @@ func main() {
 				postsAuth.PATCH("/:id", postHandler.UpdatePost)
 				postsAuth.DELETE("/:id", postHandler.DeletePost)
 				postsAuth.POST("/media-upload-url", postHandler.MediaUploadURL)
+				postsAuth.PUT("/:id/flair", extHandler.SetPostFlair)
 			}
 		}
 
@@ -216,6 +271,12 @@ func main() {
 		}
 
 		// Módulo 1.8: Participación Comunitaria, Búsqueda y Recomendaciones
+		appeals := v1.Group("/appeals")
+		appeals.Use(middleware.AuthRequired(cfg.JWTSecret))
+		{
+			appeals.POST("", extHandler.CreateAppeal)
+		}
+
 		reports := v1.Group("/reports")
 		reports.Use(middleware.AuthRequired(cfg.JWTSecret))
 		{
@@ -249,6 +310,8 @@ func main() {
 			admin.POST("/moderation/actions/unban", adminHandler.UnbanUser)
 			admin.DELETE("/moderation/content/:id/remove", adminHandler.AdminRemoveContent)
 			admin.GET("/audit/logs", adminHandler.ListAuditLogs)
+			admin.GET("/appeals", extHandler.AdminListAppeals)
+			admin.PATCH("/appeals/:id", extHandler.AdminDecideAppeal)
 			admin.GET("/analytics/metrics", adminHandler.GetAnalyticsMetrics)
 			admin.POST("/recommendations/reindex", adminHandler.ReindexRecommendations)
 

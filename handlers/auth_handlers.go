@@ -20,6 +20,19 @@ import (
 type AuthHandler struct {
 	repo repository.Repository
 	cfg  *config.Config
+	// Ext habilita sesiones por dispositivo (opcional; nil en las pruebas con MemoryRepository)
+	Ext *repository.ExtendedRepository
+}
+
+// sessionTokens emite el par de tokens; si hay sesiones disponibles y no se indica una,
+// abre una nueva sesión para este dispositivo.
+func (h *AuthHandler) sessionTokens(c *gin.Context, user *models.User, sid string) (string, string, error) {
+	if sid == "" && h.Ext.Available() {
+		if id, err := h.Ext.CreateSession(user.ID, c.Request.UserAgent(), c.ClientIP()); err == nil {
+			sid = id
+		}
+	}
+	return middleware.GenerateSessionTokens(user.ID, user.Username, user.GlobalRole, sid, h.cfg.JWTAccessTTL, h.cfg.JWTRefreshTTL, h.cfg.JWTSecret)
 }
 
 func NewAuthHandler(repo repository.Repository, cfg *config.Config) *AuthHandler {
@@ -106,7 +119,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	accessToken, refreshToken, err := middleware.GenerateTokens(user.ID, user.Username, user.GlobalRole, h.cfg.JWTAccessTTL, h.cfg.JWTRefreshTTL, h.cfg.JWTSecret)
+	accessToken, refreshToken, err := h.sessionTokens(c, user, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
@@ -161,7 +174,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	accessToken, refreshToken, err := middleware.GenerateTokens(user.ID, user.Username, user.GlobalRole, h.cfg.JWTAccessTTL, h.cfg.JWTRefreshTTL, h.cfg.JWTSecret)
+	accessToken, refreshToken, err := h.sessionTokens(c, user, "")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
@@ -220,7 +233,20 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	newAccessToken, newRefreshToken, err := middleware.GenerateTokens(user.ID, user.Username, user.GlobalRole, h.cfg.JWTAccessTTL, h.cfg.JWTRefreshTTL, h.cfg.JWTSecret)
+	// Sesiones activas: una sesión cerrada desde otro dispositivo ya no puede renovarse
+	if claims.SessionID != "" && h.Ext.Available() {
+		if !h.Ext.SessionBelongsTo(claims.SessionID, user.ID) {
+			h.setRefreshCookie(c, "", -1)
+			c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+				Error:   "SESSION_REVOKED",
+				Message: "La sesión de este dispositivo fue cerrada",
+			})
+			return
+		}
+		h.Ext.TouchSession(claims.SessionID, c.ClientIP())
+	}
+
+	newAccessToken, newRefreshToken, err := h.sessionTokens(c, user, claims.SessionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
@@ -241,6 +267,12 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 // Logout maneja POST /api/v1/auth/logout (200 OK)
 func (h *AuthHandler) Logout(c *gin.Context) {
+	// Cerrar sesión revoca la sesión del dispositivo actual
+	if cookie, err := c.Cookie("refresh_token"); err == nil && h.Ext.Available() {
+		if claims, err := middleware.ParseAndValidateToken(cookie, h.cfg.JWTSecret); err == nil && claims.SessionID != "" {
+			_, _ = h.Ext.RevokeSessions(claims.UserID, claims.SessionID, "")
+		}
+	}
 	h.setRefreshCookie(c, "", -1)
 	c.JSON(http.StatusOK, models.StandardResponse{
 		Success: true,

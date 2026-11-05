@@ -100,6 +100,7 @@ type Post struct {
 	HotRankingScore float64   `json:"hot_ranking_score,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 	UserVote        int       `json:"user_vote"` // voto de quien consulta: 1, -1 o 0 (no se persiste)
+	Flair           *Flair    `json:"flair,omitempty"`
 }
 
 // Comment representa un comentario jerárquico estructurado con ltree
