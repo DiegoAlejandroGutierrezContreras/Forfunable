@@ -48,6 +48,10 @@ window.UI = {
       .then(() => window.utils.showToast(msg, 'info'))
       .catch(() => window.utils.showToast(text, 'info'));
   },
+  // Tarjeta clicable que contiene otros enlaces (no se puede anidar <a> dentro de <a>)
+  cardLink(path) { return `role="link" tabindex="0" ${this.on('click', 'Router.navigate', path)} ${this.on('keydown', 'UI.cardKey', UI.EVENT, path)}`; },
+  cardKey(e, path) { if (e.key === 'Enter' && e.target.getAttribute('role') === 'link') { e.preventDefault(); Router.navigate(path); } },
+
   back(fallback = '/') { if (history.length > 1) history.back(); else Router.navigate(fallback); },
 
   esc(v) { return window.utils.escapeHTML(window.utils.decodeEntities(v == null ? '' : String(v))); },

@@ -178,18 +178,18 @@ window.SearchView = {
     }
     if ((type === 'all' || type === 'users') && users.length) {
       parts.push(section('Usuarios', users.length, `<div class="grid gap-2 sm:grid-cols-2">${users.map(u => `
-        <a href="/u/${encodeURIComponent(u.username)}" data-link class="card card-hover flex items-center gap-3">
+        <div ${UI.cardLink('/u/' + encodeURIComponent(u.username))} class="card card-hover flex cursor-pointer items-center gap-3">
           ${UI.avatar(u, 40)}<span class="flex-1 text-label-lg">@${UI.esc(u.username)}</span>
           ${window.api.user && window.api.user.username !== u.username ? `<button class="btn-secondary btn-sm" ${UI.on('click.stop.prevent', 'Router.navigate', '/chat/new?to=' + encodeURIComponent(u.username))}>${UI.icon('chat', 'text-[16px]')} Mensaje</button>` : ''}
-        </a>`).join('')}</div>`));
+        </div>`).join('')}</div>`));
     }
     if (type === 'all' || type === 'posts') {
       parts.push(section('Publicaciones', posts.length, posts.length ? `<div class="flex flex-col gap-2">${posts.map(p => `
-        <a href="/posts/${encodeURIComponent(p.id)}" data-link class="card card-hover block">
+        <article ${UI.cardLink('/posts/' + encodeURIComponent(p.id))} class="card card-hover block cursor-pointer">
           <div class="flex flex-wrap items-center gap-2 text-body-sm text-ink-muted">${UI.communityChip(p.community_name)}<span>@${UI.esc(p.author_username)}</span><span>· ${window.utils.formatTime(p.created_at)}</span><span>· ▲ ${p.net_votes || 0}</span><span>· ${p.comments_count || 0} comentarios</span></div>
           <div class="mt-1.5 font-display text-headline-sm">${this.highlight(p.title)}</div>
           ${p.body_text ? `<p class="mt-1 text-body-sm text-ink-secondary">${this.highlight(p.body_text)}</p>` : ''}
-        </a>`).join('')}</div>` : '<p class="card text-body-sm text-ink-muted">Ninguna publicación coincide con los filtros.</p>'));
+        </article>`).join('')}</div>` : '<p class="card text-body-sm text-ink-muted">Ninguna publicación coincide con los filtros.</p>'));
     }
     box.innerHTML = `<p class="text-body-sm text-ink-muted">${total} resultados para <strong class="text-ink">“${UI.esc(this.q)}”</strong></p>` + parts.join('');
   },
@@ -212,12 +212,12 @@ window.SearchView = {
     const section = (title, html) => html ? `<section><h3 class="mb-2 text-label-sm uppercase tracking-wider text-ink-muted">${title}</h3>${html}</section>` : '';
     const grid = html => `<div class="grid gap-3 sm:grid-cols-2">${html}</div>`;
     const mini = p => `
-      <a href="/posts/${encodeURIComponent(p.id)}" data-link class="card card-hover flex flex-col gap-2">
+      <article ${UI.cardLink('/posts/' + encodeURIComponent(p.id))} class="card card-hover flex cursor-pointer flex-col gap-2">
         <span class="self-start">${UI.communityChip(p.community_name)}</span>
         <span class="font-display text-headline-sm">${UI.esc(p.title)}</span>
         ${p.body_text ? `<span class="line-clamp-2 text-body-sm text-ink-secondary">${UI.esc(UI.excerpt(p.body_text, 140))}</span>` : ''}
         <span class="mt-auto text-body-sm text-ink-muted">@${UI.esc(p.author_username)} · ▲ ${p.net_votes || 0} · ${p.comments_count || 0} comentarios</span>
-      </a>`;
+      </article>`;
     const topComms = val(comms).sort((a, b) => (b.subscribers_count || 0) - (a.subscribers_count || 0)).slice(0, 6);
     const people = val(members).filter(u => u.username !== me).slice(0, 8);
     box.innerHTML = [

@@ -133,8 +133,8 @@ window.CommunityView = {
     this.pendingRequest = pending;
 
     $main().innerHTML = `
-      <section class="overflow-hidden rounded-lg border border-line bg-surface-card">
-        <div class="h-24 bg-[radial-gradient(circle_at_20%_20%,rgba(0,230,118,0.18),transparent_55%),radial-gradient(circle_at_80%_0%,rgba(56,189,248,0.15),transparent_50%)]"></div>
+      <section class="rounded-lg border border-line bg-surface-card">
+        <div class="h-24 rounded-t-lg bg-[radial-gradient(circle_at_20%_20%,rgba(0,230,118,0.18),transparent_55%),radial-gradient(circle_at_80%_0%,rgba(56,189,248,0.15),transparent_50%)]"></div>
         <div class="-mt-10 flex flex-wrap items-end gap-4 px-5 pb-5">
           <span class="flex h-20 w-20 items-center justify-center rounded-lg border border-line bg-surface-elevated text-primary">${UI.icon('terminal', 'text-[38px]')}</span>
           <div class="min-w-0 flex-1">
@@ -151,13 +151,10 @@ window.CommunityView = {
                   ? `<a href="/requests" data-link id="btn-subscribe" class="btn-secondary">${UI.icon('hourglass_top', 'text-[18px]')} Solicitud enviada</a>`
                   : `<button id="btn-subscribe" class="btn-primary" ${UI.on('click', 'CommunityExtras.requestModal', c.id, c.name)}>${UI.icon('lock_open', 'text-[18px]')} Solicitar acceso</button>`)
               : `<button id="btn-subscribe" class="${c.is_member ? 'btn-secondary' : 'btn-primary'}" ${UI.on('click', 'CommunityView.toggleJoin', c.id, c.name, c.is_member)}>${c.is_member ? `${UI.icon('check', 'text-[18px]')} Miembro` : `${UI.icon('group_add', 'text-[18px]')} Unirme`}</button>`}
-            ${manage ? `
-              <div class="relative">
-                <button class="btn-secondary px-2.5" ${UI.on('click', 'PostDetailView.toggleMenu', 'comm-menu')} aria-label="Gestionar">${UI.icon('more_horiz')}</button>
-                <div id="comm-menu" class="panel absolute right-0 top-full z-20 mt-1 hidden w-60 p-1.5">
-                  ${CommunityAdminView.links(c).map(([id, label, icon]) => `<a href="/c/${encodeURIComponent(c.name)}/${id}" data-link class="nav-item">${UI.icon(icon, 'text-[19px]')}${label}</a>`).join('')}
-                </div>
-              </div>` : ''}
+            <div class="relative">
+              <button class="btn-secondary px-2.5" ${UI.on('click', 'PostDetailView.toggleMenu', 'comm-menu')} aria-label="Más opciones" aria-haspopup="menu">${UI.icon('more_horiz')}</button>
+              <div id="comm-menu" role="menu" class="panel absolute right-0 top-full z-30 mt-1 hidden w-64 p-1.5">${this.menuItems(c, { gated, pending, manage })}</div>
+            </div>
           </div>
         </div>
       </section>
@@ -175,6 +172,28 @@ window.CommunityView = {
       FeedView.renderCommunity(document.getElementById('community-feed'), c);
     }
     Router.setRail(this.aboutCard(c, false) + this.rulesCard(c) + this.modsCard(c));
+  },
+
+  // Menú "⋯" de la comunidad: acciones para cualquiera y, si gestiona, las de moderación
+  menuItems(c, { gated, pending, manage }) {
+    const me = window.api.user;
+    const base = `/c/${encodeURIComponent(c.name)}`;
+    const item = (href, icon, label) => `<a href="${href}" data-link role="menuitem" class="nav-item">${UI.icon(icon, 'text-[19px]')}${label}</a>`;
+    const btn = (attrs, icon, label, cls = '') => `<button role="menuitem" class="nav-item w-full ${cls}" ${attrs}>${UI.icon(icon, 'text-[19px]')}${label}</button>`;
+    const out = [];
+    if (me && !gated) out.push(item(`/submit?community=${encodeURIComponent(c.id)}`, 'edit_square', 'Crear publicación'));
+    out.push(btn(UI.on('click', 'UI.share', base), 'link', 'Copiar enlace'));
+    out.push(item(`${base}/rules`, 'gavel', 'Normas de la comunidad'));
+    if (me && pending) out.push(item('/requests', 'hourglass_top', 'Ver mi solicitud de acceso'));
+    if (me && c.is_member && c.creator_id !== me.id) out.push(btn(UI.on('click', 'CommunityView.toggleJoin', c.id, c.name, true), 'logout', 'Salir de la comunidad', 'text-danger hover:text-danger'));
+    if (manage) {
+      const links = CommunityAdminView.links(c);
+      if (links.length) {
+        out.push(`<div class="mx-2 my-1.5 border-t border-line pt-2 text-label-sm uppercase tracking-wider text-ink-muted">Gestión</div>`);
+        links.forEach(([id, label, icon]) => out.push(item(`${base}/${id}`, icon, label)));
+      }
+    }
+    return out.join('');
   },
 
   aboutCard(c, withLink = true) {
