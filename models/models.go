@@ -156,6 +156,12 @@ type ChatConversation struct {
 	LastMessage   string    `json:"last_message,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	// Estado estilo WhatsApp (con la migración V004)
+	UnreadCount       int        `json:"unread_count"`
+	LastMessageAt     *time.Time `json:"last_message_at,omitempty"`
+	LastMessageMine   bool       `json:"last_message_mine,omitempty"`
+	LastMessageStatus string     `json:"last_message_status,omitempty"` // sent | delivered | read
+	LastMessageGone   bool       `json:"last_message_deleted,omitempty"`
 }
 
 // ChatMessage representa un mensaje dentro de una conversación
@@ -166,6 +172,12 @@ type ChatMessage struct {
 	MessageText    string    `json:"message_text"`
 	AttachmentURL  string    `json:"attachment_url,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
+	// Estado estilo WhatsApp (con la migración V004)
+	Status      string     `json:"status,omitempty"` // sent | delivered | read (solo en mensajes propios)
+	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
+	ReadAt      *time.Time `json:"read_at,omitempty"`
+	EditedAt    *time.Time `json:"edited_at,omitempty"`
+	Deleted     bool       `json:"deleted,omitempty"` // eliminado para todos
 }
 
 // UserBlock representa el bloqueo mutuo entre dos usuarios

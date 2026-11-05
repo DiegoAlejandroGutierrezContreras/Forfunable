@@ -290,8 +290,9 @@ window.Router = {
       set(['nav-notif-badge', 'hdr-notif-badge'], notifs.filter(n => !n.is_read).length);
     } catch (_) {}
     try {
-      const reqs = await window.api.listChatRequests();
-      set(['nav-chat-badge', 'hdr-chat-badge'], reqs.length);
+      // Solicitudes pendientes + mensajes sin leer (consultarlo confirma la entrega: ✓✓ gris)
+      const [reqs, unread] = await Promise.all([window.api.listChatRequests(), window.api.unreadMessages().catch(() => 0)]);
+      set(['nav-chat-badge', 'hdr-chat-badge'], reqs.length + unread);
     } catch (_) {}
   },
 

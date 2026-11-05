@@ -135,6 +135,7 @@ func main() {
 	commHandler.Ext = extRepo
 	extraHandler.Ext = extRepo
 	commentHandler.Ext = extRepo
+	chatHandler.Ext = extRepo
 	extHandler := handlers.NewExtendedHandler(pgRepo, extRepo)
 
 	// ==========================================
@@ -257,6 +258,9 @@ func main() {
 			chats.GET("/conversations", chatHandler.ListConversations)
 			chats.GET("/conversations/:id/messages", chatHandler.ListMessages)
 			chats.POST("/conversations/:id/messages", chatHandler.SendMessage)
+			chats.PATCH("/messages/:id", chatHandler.EditMessage)
+			chats.DELETE("/messages/:id", chatHandler.DeleteMessage)
+			chats.GET("/unread", chatHandler.UnreadCount)
 		}
 
 		// Módulo 1.7: Sistema de Notificaciones

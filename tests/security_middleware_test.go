@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"forfunable/middleware"
 	"forfunable/services"
@@ -226,5 +227,32 @@ func TestSecurityHeaders_StrictCSP(t *testing.T) {
 	}
 	if !strings.Contains(w.Header().Get("Strict-Transport-Security"), "max-age=31536000") {
 		t.Fatal("falta HSTS")
+	}
+}
+
+func TestRateLimiter_OnlyCountsAPI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.NewRateLimiter(3, time.Minute).Middleware())
+	r.GET("/static/app.js", func(c *gin.Context) { c.String(http.StatusOK, "js") })
+	r.GET("/api/v1/ping", func(c *gin.Context) { c.String(http.StatusOK, "ok") })
+	get := func(path string) int {
+		req, _ := http.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w.Code
+	}
+	for i := 0; i < 20; i++ {
+		if code := get("/static/app.js"); code != http.StatusOK {
+			t.Fatalf("los estáticos no deben limitarse (petición %d → %d)", i+1, code)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		if code := get("/api/v1/ping"); code != http.StatusOK {
+			t.Fatalf("la API debe permitir 3 peticiones (petición %d → %d)", i+1, code)
+		}
+	}
+	if code := get("/api/v1/ping"); code != http.StatusTooManyRequests {
+		t.Fatalf("la cuarta petición a la API debe dar 429, dio %d", code)
 	}
 }

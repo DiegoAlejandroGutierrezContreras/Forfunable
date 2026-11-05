@@ -1024,3 +1024,255 @@ func (e *ExtendedRepository) ExportUserData(userID string) (map[string]interface
 	}
 	return out, nil
 }
+
+// --- Chat estilo WhatsApp: entregado, leído, editado y eliminado (V004) ---
+
+func chatStatus(delivered, read *time.Time) string {
+	switch {
+	case read != nil:
+		return "read"
+	case delivered != nil:
+		return "delivered"
+	default:
+		return "sent"
+	}
+}
+
+// ListChatMessages devuelve los últimos `limit` mensajes en orden cronológico, sin los que el
+// lector eliminó para sí. Los eliminados para todos llegan sin texto y con Deleted=true.
+func (e *ExtendedRepository) ListChatMessages(convID, viewerID string, limit int) ([]*models.ChatMessage, error) {
+	if err := e.guard(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	rows, err := e.db.QueryContext(ctx, `
+		SELECT * FROM (
+		  SELECT m.id, m.conversation_id, m.sender_id, m.message_text, COALESCE(m.attachment_url, ''), m.created_at,
+		         s.delivered_at, s.read_at, s.edited_at, s.deleted_at
+		  FROM chat_messages m
+		  LEFT JOIN chat_message_state s ON s.message_id = m.id
+		  WHERE m.conversation_id = $1
+		    AND NOT EXISTS (SELECT 1 FROM chat_message_hidden h WHERE h.message_id = m.id AND h.user_id = $2)
+		  ORDER BY m.created_at DESC
+		  LIMIT $3
+		) t ORDER BY created_at ASC`, convID, viewerID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*models.ChatMessage{}
+	for rows.Next() {
+		m := &models.ChatMessage{}
+		var deleted *time.Time
+		if err := rows.Scan(&m.ID, &m.ConversationID, &m.SenderID, &m.MessageText, &m.AttachmentURL, &m.CreatedAt,
+			&m.DeliveredAt, &m.ReadAt, &m.EditedAt, &deleted); err != nil {
+			return nil, err
+		}
+		if deleted != nil {
+			m.Deleted, m.MessageText, m.AttachmentURL, m.EditedAt = true, "", "", nil
+		}
+		if m.SenderID == viewerID {
+			m.Status = chatStatus(m.DeliveredAt, m.ReadAt)
+		} else {
+			m.DeliveredAt, m.ReadAt = nil, nil // el remitente es quien ve las marcas
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// MarkChatRead marca como entregados y leídos los mensajes recibidos en una conversación.
+func (e *ExtendedRepository) MarkChatRead(convID, readerID string) error {
+	if err := e.guard(); err != nil {
+		return err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	_, err := e.db.ExecContext(ctx, `
+		INSERT INTO chat_message_state (message_id, delivered_at, read_at)
+		SELECT m.id, NOW(), NOW() FROM chat_messages m
+		WHERE m.conversation_id = $1 AND m.sender_id <> $2
+		  AND NOT EXISTS (SELECT 1 FROM chat_message_state s WHERE s.message_id = m.id AND s.read_at IS NOT NULL)
+		ON CONFLICT (message_id) DO UPDATE
+		  SET delivered_at = COALESCE(chat_message_state.delivered_at, EXCLUDED.delivered_at),
+		      read_at = COALESCE(chat_message_state.read_at, EXCLUDED.read_at)`, convID, readerID)
+	return err
+}
+
+// MarkChatDelivered marca como entregados todos los mensajes que el usuario aún no había recibido
+// (se llama cuando su app consulta la bandeja o los contadores, es decir, cuando está conectado).
+func (e *ExtendedRepository) MarkChatDelivered(userID string) error {
+	if err := e.guard(); err != nil {
+		return err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	_, err := e.db.ExecContext(ctx, `
+		INSERT INTO chat_message_state (message_id, delivered_at)
+		SELECT m.id, NOW() FROM chat_messages m
+		JOIN chat_conversations c ON c.id = m.conversation_id
+		WHERE (c.user1_id = $1 OR c.user2_id = $1) AND m.sender_id <> $1
+		  AND NOT EXISTS (SELECT 1 FROM chat_message_state s WHERE s.message_id = m.id AND s.delivered_at IS NOT NULL)
+		ON CONFLICT (message_id) DO UPDATE SET delivered_at = COALESCE(chat_message_state.delivered_at, EXCLUDED.delivered_at)`, userID)
+	return err
+}
+
+// UnreadChatCount cuenta los mensajes recibidos sin leer (sin los eliminados ni ocultos).
+func (e *ExtendedRepository) UnreadChatCount(userID string) (int, error) {
+	if err := e.guard(); err != nil {
+		return 0, err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	var n int
+	err := e.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM chat_messages m
+		JOIN chat_conversations c ON c.id = m.conversation_id
+		LEFT JOIN chat_message_state s ON s.message_id = m.id
+		WHERE (c.user1_id = $1 OR c.user2_id = $1) AND m.sender_id <> $1
+		  AND s.read_at IS NULL AND s.deleted_at IS NULL
+		  AND NOT EXISTS (SELECT 1 FROM chat_message_hidden h WHERE h.message_id = m.id AND h.user_id = $1)`, userID).Scan(&n)
+	return n, err
+}
+
+// ListChatConversations: bandeja con último mensaje visible, sus marcas y los no leídos.
+func (e *ExtendedRepository) ListChatConversations(userID string) ([]*models.ChatConversation, error) {
+	if err := e.guard(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	rows, err := e.db.QueryContext(ctx, `
+		SELECT c.id, c.user1_id, c.user2_id, u.username, c.created_at, c.updated_at,
+		       lm.sender_id, COALESCE(lm.message_text, ''), lm.created_at, ls.delivered_at, ls.read_at, ls.deleted_at,
+		       (SELECT COUNT(*) FROM chat_messages m2
+		          LEFT JOIN chat_message_state s2 ON s2.message_id = m2.id
+		         WHERE m2.conversation_id = c.id AND m2.sender_id <> $1 AND s2.read_at IS NULL AND s2.deleted_at IS NULL
+		           AND NOT EXISTS (SELECT 1 FROM chat_message_hidden h2 WHERE h2.message_id = m2.id AND h2.user_id = $1))
+		FROM chat_conversations c
+		JOIN users u ON u.id = CASE WHEN c.user1_id = $1 THEN c.user2_id ELSE c.user1_id END
+		LEFT JOIN LATERAL (
+		  SELECT m.id, m.sender_id, m.message_text, m.created_at FROM chat_messages m
+		  WHERE m.conversation_id = c.id
+		    AND NOT EXISTS (SELECT 1 FROM chat_message_hidden h WHERE h.message_id = m.id AND h.user_id = $1)
+		  ORDER BY m.created_at DESC LIMIT 1
+		) lm ON TRUE
+		LEFT JOIN chat_message_state ls ON ls.message_id = lm.id
+		WHERE c.user1_id = $1 OR c.user2_id = $1
+		ORDER BY COALESCE(lm.created_at, c.updated_at) DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*models.ChatConversation{}
+	for rows.Next() {
+		c := &models.ChatConversation{}
+		var sender sql.NullString
+		var delivered, read, deleted *time.Time
+		if err := rows.Scan(&c.ID, &c.User1ID, &c.User2ID, &c.OtherUsername, &c.CreatedAt, &c.UpdatedAt,
+			&sender, &c.LastMessage, &c.LastMessageAt, &delivered, &read, &deleted, &c.UnreadCount); err != nil {
+			return nil, err
+		}
+		if sender.Valid {
+			c.LastMessageMine = sender.String == userID
+			if c.LastMessageMine {
+				c.LastMessageStatus = chatStatus(delivered, read)
+			}
+			if deleted != nil {
+				c.LastMessageGone, c.LastMessage = true, ""
+			}
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// ChatMessageRef reúne lo necesario para autorizar editar o eliminar un mensaje.
+type ChatMessageRef struct {
+	ID, ConversationID, SenderID, User1ID, User2ID string
+	CreatedAt                                      time.Time
+	Deleted                                        bool
+}
+
+func (e *ExtendedRepository) GetChatMessageRef(id string) (*ChatMessageRef, error) {
+	if err := e.guard(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	r := &ChatMessageRef{}
+	var deleted *time.Time
+	err := e.db.QueryRowContext(ctx, `
+		SELECT m.id, m.conversation_id, m.sender_id, c.user1_id, c.user2_id, m.created_at, s.deleted_at
+		FROM chat_messages m
+		JOIN chat_conversations c ON c.id = m.conversation_id
+		LEFT JOIN chat_message_state s ON s.message_id = m.id
+		WHERE m.id = $1`, id).Scan(&r.ID, &r.ConversationID, &r.SenderID, &r.User1ID, &r.User2ID, &r.CreatedAt, &deleted)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("mensaje no encontrado")
+	}
+	r.Deleted = deleted != nil
+	return r, err
+}
+
+func (e *ExtendedRepository) EditChatMessage(id, text string) (time.Time, error) {
+	if err := e.guard(); err != nil {
+		return time.Time{}, err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	tx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE chat_messages SET message_text = $2 WHERE id = $1`, id, text); err != nil {
+		return time.Time{}, err
+	}
+	var at time.Time
+	if err := tx.QueryRowContext(ctx, `
+		INSERT INTO chat_message_state (message_id, edited_at) VALUES ($1, NOW())
+		ON CONFLICT (message_id) DO UPDATE SET edited_at = NOW()
+		RETURNING edited_at`, id).Scan(&at); err != nil {
+		return time.Time{}, err
+	}
+	return at, tx.Commit()
+}
+
+// DeleteChatMessageForAll borra el contenido para ambos participantes y deja la marca "eliminado".
+func (e *ExtendedRepository) DeleteChatMessageForAll(id string) error {
+	if err := e.guard(); err != nil {
+		return err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	tx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE chat_messages SET message_text = '', attachment_url = NULL WHERE id = $1`, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO chat_message_state (message_id, deleted_at) VALUES ($1, NOW())
+		ON CONFLICT (message_id) DO UPDATE SET deleted_at = NOW()`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// HideChatMessage implementa "eliminar para mí".
+func (e *ExtendedRepository) HideChatMessage(id, userID string) error {
+	if err := e.guard(); err != nil {
+		return err
+	}
+	ctx, cancel := e.ctx()
+	defer cancel()
+	_, err := e.db.ExecContext(ctx, `INSERT INTO chat_message_hidden (message_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, id, userID)
+	return err
+}

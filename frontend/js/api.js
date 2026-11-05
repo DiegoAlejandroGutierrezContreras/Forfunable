@@ -439,6 +439,20 @@ class ApiClient {
     return this.listFrom(await this.request(`/chats/conversations/${convId}/messages`), 'messages');
   }
 
+  // Chat estilo WhatsApp: editar (15 min), eliminar para mí / para todos (48 h), no leídos
+  async editMessage(messageId, content) {
+    return await this.request(`/chats/messages/${messageId}`, this.jsonv('PATCH', 'chatMessage', { message_text: content }));
+  }
+
+  async deleteMessage(messageId, scope = 'me') {
+    return await this.request(`/chats/messages/${messageId}?for=${scope === 'all' ? 'all' : 'me'}`, { method: 'DELETE' });
+  }
+
+  async unreadMessages() {
+    const data = await this.request('/chats/unread');
+    return (data && data.unread) || 0;
+  }
+
   async sendMessage(convId, content) {
     return await this.request(`/chats/conversations/${convId}/messages`, {
       method: 'POST',

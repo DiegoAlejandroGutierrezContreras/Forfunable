@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"forfunable/middleware"
 	"forfunable/models"
@@ -14,7 +16,14 @@ import (
 
 type ChatHandler struct {
 	repo repository.Repository
+	Ext  *repository.ExtendedRepository // opcional: entregado/leído, editar y eliminar (V004)
 }
+
+// Plazos al estilo WhatsApp
+const (
+	ChatEditWindow      = 15 * time.Minute // editar un mensaje propio
+	ChatDeleteAllWindow = 48 * time.Hour   // eliminar para todos
+)
 
 func NewChatHandler(repo repository.Repository) *ChatHandler {
 	return &ChatHandler{repo: repo}
@@ -214,7 +223,15 @@ func (h *ChatHandler) ListConversations(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
-	convs, err := h.repo.ListConversations(userID, page, limit)
+	var convs []*models.ChatConversation
+	var err error
+	if h.Ext.Available() {
+		// Abrir la bandeja confirma la entrega de lo recibido (doble marca gris)
+		_ = h.Ext.MarkChatDelivered(userID)
+		convs, err = h.Ext.ListChatConversations(userID)
+	} else {
+		convs, err = h.repo.ListConversations(userID, page, limit)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
@@ -253,7 +270,17 @@ func (h *ChatHandler) ListMessages(c *gin.Context) {
 		return
 	}
 
-	messages, err := h.repo.ListMessages(convID, beforeTimestamp, limit)
+	var messages []*models.ChatMessage
+	if h.Ext.Available() {
+		// Abrir la conversación marca como leído lo recibido (doble marca azul)
+		_ = h.Ext.MarkChatRead(convID, userID)
+		if limit <= 50 {
+			limit = 200
+		}
+		messages, err = h.Ext.ListChatMessages(convID, userID, limit)
+	} else {
+		messages, err = h.repo.ListMessages(convID, beforeTimestamp, limit)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error:   "INTERNAL_ERROR",
@@ -323,6 +350,9 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 	notify(h.repo, recipientID, userID, "Nuevo mensaje",
 		"u/"+c.GetString("username")+" te envió un mensaje privado", notifChat)
 
+	if h.Ext.Available() {
+		msg.Status = "sent"
+	}
 	c.JSON(http.StatusCreated, msg)
 }
 
@@ -351,4 +381,114 @@ func (h *ChatHandler) BlockUser(c *gin.Context) {
 		Success: true,
 		Message: "Usuario bloqueado correctamente",
 	})
+}
+
+// chatMessageForUser carga el mensaje y comprueba que quien llama participa en la conversación.
+func (h *ChatHandler) chatMessageForUser(c *gin.Context) *repository.ChatMessageRef {
+	if !h.Ext.Available() {
+		extError(c, repository.ErrExtendedUnavailable, http.StatusServiceUnavailable)
+		return nil
+	}
+	ref, err := h.Ext.GetChatMessageRef(c.Param("id"))
+	if err != nil {
+		extError(c, errors.New("mensaje no encontrado"), http.StatusNotFound)
+		return nil
+	}
+	uid := c.GetString("user_id")
+	if ref.User1ID != uid && ref.User2ID != uid {
+		extError(c, errors.New("mensaje no encontrado"), http.StatusNotFound)
+		return nil
+	}
+	return ref
+}
+
+// EditMessage maneja PATCH /api/v1/chats/messages/:id (200 OK): solo el remitente, durante 15 minutos.
+func (h *ChatHandler) EditMessage(c *gin.Context) {
+	ref := h.chatMessageForUser(c)
+	if ref == nil {
+		return
+	}
+	if ref.SenderID != c.GetString("user_id") {
+		extError(c, errors.New("solo puedes editar tus propios mensajes"), http.StatusForbidden)
+		return
+	}
+	if ref.Deleted {
+		extError(c, errors.New("el mensaje fue eliminado"), http.StatusConflict)
+		return
+	}
+	if time.Since(ref.CreatedAt) > ChatEditWindow {
+		extError(c, errors.New("solo puedes editar un mensaje durante los primeros 15 minutos"), http.StatusForbidden)
+		return
+	}
+	var req models.SendChatMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.MessageText) == "" {
+		extError(c, errors.New("escribe el nuevo texto del mensaje"), http.StatusBadRequest)
+		return
+	}
+	text := middleware.SanitizeText(req.MessageText)
+	if len([]rune(text)) > 2000 {
+		extError(c, errors.New("el mensaje admite máximo 2000 caracteres"), http.StatusBadRequest)
+		return
+	}
+	editedAt, err := h.Ext.EditChatMessage(ref.ID, text)
+	if err != nil {
+		extError(c, err, http.StatusInternalServerError)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "id": ref.ID, "message_text": text, "edited_at": editedAt})
+}
+
+// DeleteMessage maneja DELETE /api/v1/chats/messages/:id?for=me|all (200 OK).
+// "me" lo oculta solo para quien llama; "all" (solo el remitente, 48 h) lo borra para ambos.
+func (h *ChatHandler) DeleteMessage(c *gin.Context) {
+	ref := h.chatMessageForUser(c)
+	if ref == nil {
+		return
+	}
+	uid := c.GetString("user_id")
+	switch c.DefaultQuery("for", "me") {
+	case "me":
+		if err := h.Ext.HideChatMessage(ref.ID, uid); err != nil {
+			extError(c, err, http.StatusInternalServerError)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "scope": "me", "message": "Mensaje eliminado para ti"})
+	case "all":
+		if ref.SenderID != uid {
+			extError(c, errors.New("solo puedes eliminar para todos tus propios mensajes"), http.StatusForbidden)
+			return
+		}
+		if ref.Deleted {
+			extError(c, errors.New("el mensaje ya fue eliminado"), http.StatusConflict)
+			return
+		}
+		if time.Since(ref.CreatedAt) > ChatDeleteAllWindow {
+			extError(c, errors.New("solo puedes eliminar para todos durante las primeras 48 horas; puedes eliminarlo para ti"), http.StatusForbidden)
+			return
+		}
+		if err := h.Ext.DeleteChatMessageForAll(ref.ID); err != nil {
+			extError(c, err, http.StatusInternalServerError)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "scope": "all", "message": "Mensaje eliminado para todos"})
+	default:
+		extError(c, errors.New("indica for=me o for=all"), http.StatusBadRequest)
+	}
+}
+
+// UnreadCount maneja GET /api/v1/chats/unread (200 OK): mensajes sin leer.
+// Al consultarlo, la app confirma la entrega de lo recibido (doble marca gris para el remitente).
+func (h *ChatHandler) UnreadCount(c *gin.Context) {
+	if !h.Ext.Available() {
+		c.JSON(http.StatusOK, gin.H{"unread": 0})
+		return
+	}
+	uid := c.GetString("user_id")
+	_ = h.Ext.MarkChatDelivered(uid)
+	n, err := h.Ext.UnreadChatCount(uid)
+	if err != nil {
+		extError(c, err, http.StatusInternalServerError)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"unread": n})
 }

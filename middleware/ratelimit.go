@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,6 +49,12 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 
 func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Solo se limita la API: los estáticos (JS, CSS, index.html) de una carga de página
+		// consumirían el cupo y varios usuarios tras la misma IP se bloquearían entre sí.
+		if !strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.Next()
+			return
+		}
 		key := c.ClientIP()
 		if uid, exists := c.Get("user_id"); exists {
 			key = uid.(string)
