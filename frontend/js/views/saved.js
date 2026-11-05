@@ -35,7 +35,7 @@ window.SavedView = {
 
   unavailable() {
     document.getElementById('saved-collections').classList.add('hidden');
-    document.getElementById('saved-list').innerHTML = UI.empty({ icon: 'construction', title: 'Función no disponible todavía', text: 'El servidor aún no tiene aplicada la migración V003. Vuelve a intentarlo más tarde.' });
+    document.getElementById('saved-list').innerHTML = UI.unavailable('Función no disponible todavía');
   },
 
   paintCollections() {

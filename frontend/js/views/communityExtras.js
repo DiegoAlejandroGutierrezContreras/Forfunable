@@ -11,7 +11,7 @@ window.CommunityExtras = {
   ],
 
   unavailable(title = 'Función no disponible todavía') {
-    return UI.empty({ icon: 'construction', title, text: 'El servidor aún no tiene aplicada la migración V003. Vuelve a intentarlo más tarde.' });
+    return UI.unavailable(title);
   },
 
   // Carga la comunidad y comprueba que quien entra puede gestionarla

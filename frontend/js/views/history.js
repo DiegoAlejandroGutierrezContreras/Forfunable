@@ -17,7 +17,7 @@ window.HistoryView = {
     } catch (err) {
       if (err.status === 404) return StatusView.page('404', { what: 'post' });
       if (err.error === 'FEATURE_UNAVAILABLE') {
-        $main().innerHTML = UI.empty({ icon: 'construction', title: 'Historial no disponible', text: 'El servidor aún no tiene aplicada la migración V003.' });
+        $main().innerHTML = UI.unavailable('Historial no disponible');
         return;
       }
       throw err;

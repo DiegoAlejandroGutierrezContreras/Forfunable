@@ -221,6 +221,18 @@ window.UI = {
       </div>`).join('');
   },
 
+  // Función del servidor aún sin activar (faltan tablas/permisos en la base de datos)
+  unavailable(title = 'Función no disponible todavía') {
+    const admin = window.api.user && window.api.user.global_role === 'GLOBAL_ADMIN';
+    return this.empty({
+      icon: 'construction', title,
+      text: admin
+        ? 'La base de datos aún no tiene las tablas de esta función. En la consola verás el motivo exacto y el SQL para activarla.'
+        : 'Esta función todavía no está activa en el servidor. Un administrador debe activarla; vuelve a intentarlo más tarde.',
+      action: admin ? `<a href="/admin/metrics" data-link class="btn-primary">${this.icon('database', 'text-[18px]')} Ver estado de la base de datos</a>` : ''
+    });
+  },
+
   empty({ icon = 'inbox', title, text = '', action = '' }) {
     return `
       <div class="card flex flex-col items-center px-6 py-12 text-center">

@@ -21,7 +21,7 @@ window.AppealsView = {
     let list, appeals = [];
     try { [list, appeals] = await Promise.all([window.api.mySanctions(), window.api.myAppeals()]); } catch (err) {
       if (err.error === 'FEATURE_UNAVAILABLE') {
-        document.getElementById('appeals-body').innerHTML = UI.empty({ icon: 'construction', title: 'Función no disponible todavía', text: 'El servidor aún no tiene aplicada la migración V003.' });
+        document.getElementById('appeals-body').innerHTML = UI.unavailable('Función no disponible todavía');
         return;
       }
       document.getElementById('appeals-body').innerHTML = UI.error(err, () => AppealsView.render());

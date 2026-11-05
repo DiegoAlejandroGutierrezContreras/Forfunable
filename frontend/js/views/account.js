@@ -16,7 +16,7 @@
   );
 
   const unavailable = panel => {
-    panel.innerHTML = UI.empty({ icon: 'construction', title: 'Función no disponible todavía', text: 'El servidor aún no tiene aplicada la migración V003. Vuelve a intentarlo más tarde.' });
+    panel.innerHTML = UI.unavailable('Función no disponible todavía');
   };
 
   // Lectura legible del agente de usuario: navegador y sistema

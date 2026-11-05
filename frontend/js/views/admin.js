@@ -124,7 +124,8 @@ window.AdminView = {
       return;
     }
     this._fixSQL = st.fix_sql || '';
-    const groups = Object.entries(st.groups || {});
+    const order = ['core', 'chat', 'chat_media'];
+    const groups = Object.entries(st.groups || {}).sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
     const allOk = groups.every(([, ok]) => ok);
     box.innerHTML = `
       <div class="card ${allOk ? '' : 'border-warning/40'}">
@@ -233,7 +234,7 @@ window.AdminView = {
     this.appealFilter = q.status || this.appealFilter || 'PENDING';
     let list;
     try { list = await window.api.adminListAppeals(this.appealFilter === 'ALL' ? '' : this.appealFilter); } catch (err) {
-      if (err.error === 'FEATURE_UNAVAILABLE') { this.box().innerHTML = UI.empty({ icon: 'construction', title: 'Apelaciones no disponibles', text: 'Falta aplicar la migración V003 en el servidor.' }); return; }
+      if (err.error === 'FEATURE_UNAVAILABLE') { this.box().innerHTML = UI.unavailable('Apelaciones no disponibles'); return; }
       throw err;
     }
     const kind = { COMMUNITY_BAN: ['block', 'Sanción en comunidad'], CONTENT_REMOVAL: ['delete', 'Retiro de contenido'] };
