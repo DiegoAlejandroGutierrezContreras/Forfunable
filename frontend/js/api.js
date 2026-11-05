@@ -145,22 +145,63 @@ class ApiClient {
   // 1. Módulo de Autenticación y Perfil
   // ==========================================
 
-  async register(username, email, password, recaptchaToken = 'mock_token') {
-    const data = await this.request('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, email, password, recaptcha_token: recaptchaToken })
-    });
+  // ==========================================
+  // reCAPTCHA Enterprise (LOGIN, REGISTER, CREATE_COMMUNITY)
+  // ==========================================
+
+  // Configuración pública del servidor (en caché): indica si reCAPTCHA está activo y su clave de sitio
+  publicConfig() {
+    if (!this._publicConfig) {
+      this._publicConfig = fetch(`${API_BASE}/config/public`, { credentials: 'same-origin' })
+        .then(r => (r.ok ? r.json() : {}))
+        .catch(() => ({}));
+    }
+    return this._publicConfig;
+  }
+
+  // Carga https://www.google.com/recaptcha/enterprise.js una sola vez (permitido por la CSP)
+  loadRecaptcha(siteKey) {
+    if (!this._recaptchaScript) {
+      this._recaptchaScript = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = `https://www.google.com/recaptcha/enterprise.js?render=${encodeURIComponent(siteKey)}`;
+        s.async = true;
+        s.onload = () => (window.grecaptcha && grecaptcha.enterprise ? grecaptcha.enterprise.ready(resolve) : reject(new Error('reCAPTCHA no disponible')));
+        s.onerror = () => { this._recaptchaScript = null; reject(new Error('No se pudo cargar reCAPTCHA')); };
+        document.head.appendChild(s);
+      });
+    }
+    return this._recaptchaScript;
+  }
+
+  // Token para una acción concreta. Si el servidor no exige reCAPTCHA (desarrollo, RECAPTCHA_BYPASS=true)
+  // se envía vacío: el verificador de desarrollo lo acepta y no hay ningún token simulado en el código.
+  async recaptchaToken(action) {
+    const cfg = await this.publicConfig();
+    const rc = cfg && cfg.recaptcha;
+    if (!rc || !rc.enabled || !rc.site_key) return '';
+    try {
+      await this.loadRecaptcha(rc.site_key);
+      return await grecaptcha.enterprise.execute(rc.site_key, { action });
+    } catch (_) {
+      throw { error: 'RECAPTCHA_UNAVAILABLE', status: 0, message: 'No se pudo cargar la verificación anti-bots. Desactiva el bloqueador de contenido para este sitio o inténtalo de nuevo.' };
+    }
+  }
+
+  async register(username, email, password) {
+    const payload = this.valid('register', { username, email, password });
+    payload.recaptcha_token = await this.recaptchaToken('REGISTER');
+    const data = await this.request('/auth/register', this.jsonv('POST', 'register', payload));
     if (data && data.access_token) {
       this.setSession(data.access_token, data.user);
     }
     return data;
   }
 
-  async login(email, password, recaptchaToken = 'mock_token') {
-    const data = await this.request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, recaptcha_token: recaptchaToken })
-    });
+  async login(email, password) {
+    const payload = this.valid('login', { email, password });
+    payload.recaptcha_token = await this.recaptchaToken('LOGIN');
+    const data = await this.request('/auth/login', this.jsonv('POST', 'login', payload));
     if (data && data.access_token) {
       this.setSession(data.access_token, data.user);
     }
@@ -201,21 +242,21 @@ class ApiClient {
   async updateProfile(profileData) {
     return await this.request('/users/me/profile', {
       method: 'PATCH',
-      body: JSON.stringify(profileData)
+      body: this.bodyv('updateProfile', profileData)
     });
   }
 
   async updateStatus(status) {
     return await this.request('/users/me/status', {
       method: 'PATCH',
-      body: JSON.stringify({ presence_status: status })
+      body: this.bodyv('updateStatus', { presence_status: status })
     });
   }
 
   async changePassword(currentPassword, newPassword) {
     return await this.request('/users/me/password', {
       method: 'PATCH',
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+      body: this.bodyv('changePassword', { current_password: currentPassword, new_password: newPassword })
     });
   }
 
@@ -250,10 +291,9 @@ class ApiClient {
   }
 
   async createCommunity(communityData) {
-    return await this.request('/communities', {
-      method: 'POST',
-      body: JSON.stringify(communityData)
-    });
+    const payload = this.valid('createCommunity', communityData);
+    payload.recaptcha_token = await this.recaptchaToken('CREATE_COMMUNITY');
+    return await this.request('/communities', this.jsonv('POST', 'createCommunity', payload));
   }
 
   async joinCommunity(communityId) {
@@ -288,14 +328,14 @@ class ApiClient {
   async createPost(postData) {
     return await this.request('/posts', {
       method: 'POST',
-      body: JSON.stringify(postData)
+      body: this.bodyv('createPost', postData)
     });
   }
 
   async updatePost(postId, postData) {
     return await this.request(`/posts/${postId}`, {
       method: 'PATCH',
-      body: JSON.stringify(postData)
+      body: this.bodyv('updatePost', postData)
     });
   }
 
@@ -317,14 +357,14 @@ class ApiClient {
   async createComment(commentData) {
     return await this.request('/comments', {
       method: 'POST',
-      body: JSON.stringify(commentData)
+      body: this.bodyv('createComment', commentData)
     });
   }
 
   async updateComment(commentId, content) {
     return await this.request(`/comments/${commentId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ content })
+      body: this.bodyv('updateComment', { content })
     });
   }
 
@@ -341,14 +381,14 @@ class ApiClient {
   async votePost(postId, voteType) {
     return await this.request(`/votes/posts/${postId}`, {
       method: 'POST',
-      body: JSON.stringify({ vote_value: voteType })
+      body: this.bodyv('vote', { vote_value: voteType })
     });
   }
 
   async voteComment(commentId, voteType) {
     return await this.request(`/votes/comments/${commentId}`, {
       method: 'POST',
-      body: JSON.stringify({ vote_value: voteType })
+      body: this.bodyv('vote', { vote_value: voteType })
     });
   }
 
@@ -374,7 +414,7 @@ class ApiClient {
   async createReport(targetId, targetType, reasonCode, description = '') {
     return await this.request('/reports', {
       method: 'POST',
-      body: JSON.stringify({ target_id: targetId, target_type: targetType, reason_code: reasonCode, description })
+      body: this.bodyv('report', { target_id: targetId, target_type: targetType, reason_code: reasonCode, description })
     });
   }
 
@@ -402,7 +442,7 @@ class ApiClient {
   async sendMessage(convId, content) {
     return await this.request(`/chats/conversations/${convId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ message_text: content })
+      body: this.bodyv('chatMessage', { message_text: content })
     });
   }
 
@@ -414,14 +454,14 @@ class ApiClient {
   async respondChatRequest(requestId, action) {
     return await this.request(`/chats/requests/${requestId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ action })
+      body: this.bodyv('chatAction', { action })
     });
   }
 
   async createChatRequest(targetUserId, message) {
     return await this.request('/chats/requests', {
       method: 'POST',
-      body: JSON.stringify({ recipient_user_id: targetUserId, initial_message: message })
+      body: this.bodyv('chatRequest', { recipient_user_id: targetUserId, initial_message: message })
     });
   }
 
@@ -436,7 +476,7 @@ class ApiClient {
   async adminUpdateUserRole(userId, role) {
     return await this.request(`/admin/users/${userId}/role`, {
       method: 'PATCH',
-      body: JSON.stringify({ global_role: role })
+      body: this.bodyv('userRole', { global_role: role })
     });
   }
 
@@ -456,13 +496,18 @@ class ApiClient {
     const status = { DISMISS: 'DISMISSED', RESOLVE_DELETE: 'ACTIONED' }[resolution] || resolution;
     return await this.request(`/admin/moderation/reports/${reportId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status })
+      body: this.bodyv('resolveReport', { status })
     });
   }
 
   json(method, body) {
     return { method, body: JSON.stringify(body || {}) };
   }
+
+  // Validación previa con Zod (js/schemas.js): ningún payload sale sin pasar por su esquema
+  valid(schema, data) { return window.validatePayload(schema, data); }
+  bodyv(schema, data) { return JSON.stringify(this.valid(schema, data)); }
+  jsonv(method, schema, data) { return { method, body: this.bodyv(schema, data) }; }
 
   // ==========================================
   // 9. Miembros, edad y preferencias
@@ -475,7 +520,7 @@ class ApiClient {
 
   // 01_06: el backend registra la mayoría de edad declarada por el usuario
   async verifyAge(assertion) {
-    return await this.request('/users/me/verify-age', this.json('POST', { idp_assertion_token: assertion }));
+    return await this.request('/users/me/verify-age', this.jsonv('POST', 'verifyAge', { idp_assertion_token: assertion }));
   }
 
   async getNotificationSettings() {
@@ -483,7 +528,7 @@ class ApiClient {
   }
 
   async updateNotificationSettings(settings) {
-    return await this.request('/notifications/settings', this.json('PUT', settings));
+    return await this.request('/notifications/settings', this.jsonv('PUT', 'notificationSettings', settings));
   }
 
   // ==========================================
@@ -495,11 +540,11 @@ class ApiClient {
   }
 
   async createCommunityNote(postId, noteText, proofUrl = '') {
-    return await this.request('/community-notes', this.json('POST', { post_id: postId, note_text: noteText, proof_url: proofUrl }));
+    return await this.request('/community-notes', this.jsonv('POST', 'communityNote', { post_id: postId, note_text: noteText, proof_url: proofUrl }));
   }
 
   async voteCommunityNote(noteId, isHelpful) {
-    return await this.request(`/community-notes/${noteId}/vote`, this.json('POST', { is_helpful: isHelpful }));
+    return await this.request(`/community-notes/${noteId}/vote`, this.jsonv('POST', 'noteVote', { is_helpful: isHelpful }));
   }
 
   // ==========================================
@@ -507,11 +552,11 @@ class ApiClient {
   // ==========================================
 
   async adminUpdateCommunitySettings(communityId, settings) {
-    return await this.request(`/admin/communities/${communityId}/settings`, this.json('PUT', settings));
+    return await this.request(`/admin/communities/${communityId}/settings`, this.jsonv('PUT', 'communitySettings', settings));
   }
 
   async adminAssignModerator(communityId, userId, role) {
-    return await this.request(`/admin/communities/${communityId}/moderators`, this.json('POST', { user_id: userId, role }));
+    return await this.request(`/admin/communities/${communityId}/moderators`, this.jsonv('POST', 'assignModerator', { user_id: userId, role }));
   }
 
   async adminListBans(communityId) {
@@ -519,11 +564,11 @@ class ApiClient {
   }
 
   async adminBan(userId, communityId, reason, durationDays) {
-    return await this.request('/admin/moderation/actions/ban', this.json('POST', { user_id: userId, community_id: communityId, reason, duration_days: durationDays }));
+    return await this.request('/admin/moderation/actions/ban', this.jsonv('POST', 'ban', { user_id: userId, community_id: communityId, reason, duration_days: durationDays }));
   }
 
   async adminUnban(userId, communityId, reason) {
-    return await this.request('/admin/moderation/actions/unban', this.json('POST', { user_id: userId, community_id: communityId, reason }));
+    return await this.request('/admin/moderation/actions/unban', this.jsonv('POST', 'unban', { user_id: userId, community_id: communityId, reason }));
   }
 
   async adminRemoveContent(contentId) {
@@ -539,11 +584,11 @@ class ApiClient {
   }
 
   async adminReindex(body = {}) {
-    return await this.request('/admin/recommendations/reindex', this.json('POST', body));
+    return await this.request('/admin/recommendations/reindex', this.jsonv('POST', 'reindex', body));
   }
 
   async adminUpdateUserStatus(userId, isActive, freezeReason = '') {
-    return await this.request(`/admin/users/${userId}/status`, this.json('PATCH', { is_active: isActive, freeze_reason: freezeReason }));
+    return await this.request(`/admin/users/${userId}/status`, this.jsonv('PATCH', 'userStatus', { is_active: isActive, freeze_reason: freezeReason }));
   }
 
   async adminListAllReports(status = '') {
@@ -569,7 +614,7 @@ class ApiClient {
   }
 
   async savePost(postId, collectionId = null, note = '') {
-    const res = await this.request(`/users/me/saved/${postId}`, this.json('PUT', { collection_id: collectionId || null, note }));
+    const res = await this.request(`/users/me/saved/${postId}`, this.jsonv('PUT', 'save', { collection_id: collectionId || null, note }));
     (await this.savedIds()).add(postId);
     return res;
   }
@@ -581,8 +626,8 @@ class ApiClient {
   }
 
   async listCollections() { return this.listFrom(await this.request('/users/me/collections')); }
-  async createCollection(name, description = '') { return await this.request('/users/me/collections', this.json('POST', { name, description })); }
-  async updateCollection(id, name, description = '') { return await this.request(`/users/me/collections/${id}`, this.json('PATCH', { name, description })); }
+  async createCollection(name, description = '') { return await this.request('/users/me/collections', this.jsonv('POST', 'collection', { name, description })); }
+  async updateCollection(id, name, description = '') { return await this.request(`/users/me/collections/${id}`, this.jsonv('PATCH', 'collection', { name, description })); }
   async deleteCollection(id) { return await this.request(`/users/me/collections/${id}`, { method: 'DELETE' }); }
 
   // ==========================================
@@ -609,7 +654,7 @@ class ApiClient {
   async exportData() { return await this.request('/users/me/export'); }
   async getDeletion() { return await this.request('/users/me/deletion'); }
   async requestDeletion(password, confirmUsername, reason = '') {
-    const data = await this.request('/users/me/deletion', this.json('POST', { password, confirm_username: confirmUsername, reason }));
+    const data = await this.request('/users/me/deletion', this.jsonv('POST', 'deleteAccount', { password, confirm_username: confirmUsername, reason }));
     this._savedIds = null;
     this.setSession(null, null);
     return data;
@@ -620,18 +665,18 @@ class ApiClient {
   // 15. Comunidades privadas, flairs y propiedad (06_79, 06_80, 02_19, 05_40)
   // ==========================================
 
-  async requestAccess(communityId, message = '') { return await this.request(`/communities/${communityId}/join`, this.json('POST', { message })); }
+  async requestAccess(communityId, message = '') { return await this.request(`/communities/${communityId}/join`, this.jsonv('POST', 'accessRequest', { message })); }
   async myAccessRequests() { return this.listFrom(await this.request('/users/me/access-requests')); }
   async listAccessRequests(name, status = '') { return this.listFrom(await this.request(`/communities/${encodeURIComponent(name)}/access-requests${status ? '?status=' + status : ''}`)); }
-  async decideAccessRequest(communityId, requestId, action, note = '') { return await this.request(`/communities/${communityId}/access-requests/${requestId}`, this.json('PATCH', { action, note })); }
+  async decideAccessRequest(communityId, requestId, action, note = '') { return await this.request(`/communities/${communityId}/access-requests/${requestId}`, this.jsonv('PATCH', 'accessDecision', { action, note })); }
 
   async listFlairs(name) { return await this.request(`/communities/${encodeURIComponent(name)}/flairs`); }
-  async createFlair(communityId, flair) { return await this.request(`/communities/${communityId}/flairs`, this.json('POST', flair)); }
-  async updateFlair(communityId, flairId, flair) { return await this.request(`/communities/${communityId}/flairs/${flairId}`, this.json('PATCH', flair)); }
+  async createFlair(communityId, flair) { return await this.request(`/communities/${communityId}/flairs`, this.jsonv('POST', 'flair', flair)); }
+  async updateFlair(communityId, flairId, flair) { return await this.request(`/communities/${communityId}/flairs/${flairId}`, this.jsonv('PATCH', 'flair', flair)); }
   async deleteFlair(communityId, flairId) { return await this.request(`/communities/${communityId}/flairs/${flairId}`, { method: 'DELETE' }); }
-  async setPostFlair(postId, flairId) { return await this.request(`/posts/${postId}/flair`, this.json('PUT', { flair_id: flairId || '' })); }
+  async setPostFlair(postId, flairId) { return await this.request(`/posts/${postId}/flair`, this.jsonv('PUT', 'postFlair', { flair_id: flairId || '' })); }
 
-  async transferOwnership(communityId, newOwner, confirmName) { return await this.request(`/communities/${communityId}/transfer`, this.json('POST', { new_owner: newOwner, confirm_name: confirmName })); }
+  async transferOwnership(communityId, newOwner, confirmName) { return await this.request(`/communities/${communityId}/transfer`, this.jsonv('POST', 'transfer', { new_owner: newOwner, confirm_name: confirmName })); }
 
   // ==========================================
   // 16. Sanciones y apelaciones (01_11)
@@ -639,9 +684,9 @@ class ApiClient {
 
   async mySanctions() { return this.listFrom(await this.request('/users/me/sanctions')); }
   async myAppeals() { return this.listFrom(await this.request('/users/me/appeals')); }
-  async createAppeal(kind, referenceId, message) { return await this.request('/appeals', this.json('POST', { kind, reference_id: referenceId, message })); }
+  async createAppeal(kind, referenceId, message) { return await this.request('/appeals', this.jsonv('POST', 'appeal', { kind, reference_id: referenceId, message })); }
   async adminListAppeals(status = '') { return this.listFrom(await this.request(`/admin/appeals${status ? '?status=' + status : ''}`)); }
-  async adminDecideAppeal(id, decision, resolution) { return await this.request(`/admin/appeals/${id}`, this.json('PATCH', { decision, resolution })); }
+  async adminDecideAppeal(id, decision, resolution) { return await this.request(`/admin/appeals/${id}`, this.jsonv('PATCH', 'appealDecision', { decision, resolution })); }
 }
 
 // Exportar instancia singleton
@@ -708,7 +753,7 @@ window.utils = {
       .replace(/&amp;/g, '&');
   },
 
-  // Argumento seguro para manejadores inline (onclick="fn(${jsArg(x)})"): genera un literal JS
+  // Literal JS seguro para un atributo HTML (heredado; las vistas usan UI.on, sin manejadores en línea): genera un literal JS
   // con JSON.stringify y lo escapa para el atributo. escapeHTML solo NO basta: el navegador
   // decodifica &#039; antes de ejecutar el JS y la comilla rompe la cadena.
   jsArg(value) {

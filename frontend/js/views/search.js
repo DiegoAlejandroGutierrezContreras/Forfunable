@@ -5,6 +5,9 @@
  */
 
 window.SearchView = {
+  hideSuggest() { const el = document.getElementById('search-suggest'); if (el) el.classList.add('hidden'); },
+  submitForm(form) { this.setQuery(form.q.value); },
+
   filters: { type: 'all', community: '', format: '', period: 'all', sort: 'relevance' },
 
   // Sugerencias mientras se escribe en la barra superior
@@ -33,13 +36,13 @@ window.SearchView = {
     box.innerHTML = `<div class="px-3 py-2 text-body-sm text-ink-muted">Buscando “${UI.esc(q)}”…</div>`;
     try {
       const r = await window.api.predictiveSearch(q);
-      const row = (href, icon, label, meta) => `<a href="${href}" data-link class="flex items-center gap-3 rounded px-3 py-2 hover:bg-surface-subtle" onclick="document.getElementById('search-suggest').classList.add('hidden')">${UI.icon(icon, 'text-[18px] text-ink-muted')}<span class="min-w-0 flex-1 truncate text-body-md">${label}</span><span class="text-label-sm text-ink-muted">${meta}</span></a>`;
+      const row = (href, icon, label, meta) => `<a href="${href}" data-link class="flex items-center gap-3 rounded px-3 py-2 hover:bg-surface-subtle" ${UI.on('click', 'SearchView.hideSuggest')}>${UI.icon(icon, 'text-[18px] text-ink-muted')}<span class="min-w-0 flex-1 truncate text-body-md">${label}</span><span class="text-label-sm text-ink-muted">${meta}</span></a>`;
       const section = (title, items) => items.length ? `<div class="px-3 pb-1 pt-2 text-label-sm uppercase tracking-wider text-ink-muted">${title}</div>${items.join('')}` : '';
       const html = section('Comunidades', r.communities.slice(0, 4).map(c => row(`/c/${encodeURIComponent(c.name)}`, 'tag', `c/${UI.esc(c.name)}`, 'Comunidad')))
         + section('Usuarios', r.users.slice(0, 4).map(u => row(`/u/${encodeURIComponent(u.username)}`, 'person', `@${UI.esc(u.username)}`, 'Perfil')))
         + section('Publicaciones', r.posts.slice(0, 5).map(p => row(`/posts/${encodeURIComponent(p.id)}`, 'article', UI.esc(p.title), 'Hilo')));
       box.innerHTML = (html || `<div class="px-3 py-2 text-body-sm text-ink-muted">Sin coincidencias rápidas.</div>`)
-        + `<a href="/search?q=${encodeURIComponent(q)}" data-link class="mt-1 flex items-center gap-2 rounded border-t border-line px-3 py-2 text-body-sm text-secondary hover:bg-surface-subtle" onclick="document.getElementById('search-suggest').classList.add('hidden')">${UI.icon('manage_search', 'text-[18px]')} Búsqueda avanzada de “${UI.esc(q)}”</a>`;
+        + `<a href="/search?q=${encodeURIComponent(q)}" data-link class="mt-1 flex items-center gap-2 rounded border-t border-line px-3 py-2 text-body-sm text-secondary hover:bg-surface-subtle" ${UI.on('click', 'SearchView.hideSuggest')}>${UI.icon('manage_search', 'text-[18px]')} Búsqueda avanzada de “${UI.esc(q)}”</a>`;
     } catch (_) {
       box.innerHTML = `<div class="px-3 py-2 text-body-sm text-danger">No se pudo buscar.</div>`;
     }
@@ -52,10 +55,10 @@ window.SearchView = {
     if (header) header.value = this.q;
     $main().innerHTML = `
       ${UI.pageHeader('Explorador global', 'Busca hilos, comunidades y personas. Usa los filtros para afinar resultados técnicos.', '', 'manage_search')}
-      <form class="card mb-4 p-2" onsubmit="event.preventDefault(); SearchView.setQuery(this.q.value)">
+      <form class="card mb-4 p-2" ${UI.on('submit.prevent', 'SearchView.submitForm', UI.EL)}>
         <div class="relative">
           ${UI.icon('search', 'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted')}
-          <input name="q" id="global-search-input" class="input border-none bg-transparent py-3 pl-11 text-body-lg" placeholder="Palabra clave, c/comunidad o @usuario…" value="${UI.esc(this.q)}" autocomplete="off" oninput="SearchView.onType(this.value)">
+          <input name="q" id="global-search-input" class="input border-none bg-transparent py-3 pl-11 text-body-lg" placeholder="Palabra clave, c/comunidad o @usuario…" value="${UI.esc(this.q)}" autocomplete="off" ${UI.on('input', 'SearchView.onType', UI.VALUE)}>
         </div>
       </form>
       <div id="search-filters"></div>
@@ -76,6 +79,8 @@ window.SearchView = {
     this.q.length >= 2 ? this.execute() : this.renderDiscover();
   },
 
+  setType(value) { this.setFilter('type', value); },
+
   setFilter(key, value) {
     this.filters[key] = value;
     this.paintFilters();
@@ -84,10 +89,10 @@ window.SearchView = {
 
   paintFilters() {
     const f = this.filters;
-    const sel = (key, opts) => `<select class="input w-auto py-1.5 text-body-sm" onchange="SearchView.setFilter('${key}', this.value)">${opts.map(([v, l]) => `<option value="${v}" ${f[key] === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    const sel = (key, opts) => `<select class="input w-auto py-1.5 text-body-sm" ${UI.on('change', 'SearchView.setFilter', key, UI.VALUE)}>${opts.map(([v, l]) => `<option value="${v}" ${f[key] === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
     document.getElementById('search-filters').innerHTML = `
       <div class="flex flex-wrap items-center gap-2">
-        ${UI.tabs([{ id: 'all', label: 'Todo' }, { id: 'posts', label: 'Publicaciones', icon: 'article' }, { id: 'communities', label: 'Comunidades', icon: 'groups' }, { id: 'users', label: 'Usuarios', icon: 'person' }], f.type, "(v => SearchView.setFilter('type', v))")}
+        ${UI.tabs([{ id: 'all', label: 'Todo' }, { id: 'posts', label: 'Publicaciones', icon: 'article' }, { id: 'communities', label: 'Comunidades', icon: 'groups' }, { id: 'users', label: 'Usuarios', icon: 'person' }], f.type, 'SearchView.setType')}
         <span class="ml-auto flex flex-wrap gap-2">
           ${sel('community', [['', 'Todas las comunidades'], ...(this.communities || []).map(c => [c.id, 'c/' + UI.esc(c.name)])])}
           ${sel('format', [['', 'Cualquier formato'], ['TEXT', 'Texto'], ['IMAGE', 'Imagen'], ['VIDEO', 'Video'], ['LINK', 'Enlace']])}
@@ -110,7 +115,7 @@ window.SearchView = {
       this.hits = hits;
       this.paint();
     } catch (err) {
-      box.innerHTML = UI.error(err, 'SearchView.execute()');
+      box.innerHTML = UI.error(err, () => SearchView.execute());
     }
   },
 
@@ -175,7 +180,7 @@ window.SearchView = {
       parts.push(section('Usuarios', users.length, `<div class="grid gap-2 sm:grid-cols-2">${users.map(u => `
         <a href="/u/${encodeURIComponent(u.username)}" data-link class="card card-hover flex items-center gap-3">
           ${UI.avatar(u, 40)}<span class="flex-1 text-label-lg">@${UI.esc(u.username)}</span>
-          ${window.api.user && window.api.user.username !== u.username ? `<button class="btn-secondary btn-sm" onclick="event.preventDefault(); event.stopPropagation(); Router.navigate('/chat/new?to=' + encodeURIComponent(${UI.arg(u.username)}))">${UI.icon('chat', 'text-[16px]')} Mensaje</button>` : ''}
+          ${window.api.user && window.api.user.username !== u.username ? `<button class="btn-secondary btn-sm" ${UI.on('click.stop.prevent', 'Router.navigate', '/chat/new?to=' + encodeURIComponent(u.username))}>${UI.icon('chat', 'text-[16px]')} Mensaje</button>` : ''}
         </a>`).join('')}</div>`));
     }
     if (type === 'all' || type === 'posts') {

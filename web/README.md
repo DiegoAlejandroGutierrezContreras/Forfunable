@@ -7,7 +7,8 @@ Frontend nuevo en Next.js 15 + TypeScript + Tailwind. Convive con `frontend/` (H
 | Archivo | Propósito |
 | :--- | :--- |
 | `next.config.js` | Proxy `/api/*` → `BACKEND_URL` (same-origin, necesario para las cookies `SameSite=Strict`) y salida `standalone` |
-| `middleware.ts` | CSP con nonce por petición (UX_MAPPING.md §4.2) |
+| `middleware.ts` | CSP con nonce por petición (UX_MAPPING.md §4.2), HSTS y cabeceras defensivas |
+| `lib/schemas.ts` | Esquemas Zod (login, registro, publicación, comentario, denuncia); `apiSend` valida antes del `fetch` |
 | `tailwind.config.ts` | Tokens de *Obsidian Signal* (DESIGN.md) |
 | `lib/api.ts` | `apiFetch`: token en memoria, `X-CSRF-Token` automático en mutaciones, errores tipados |
 | `Dockerfile` | Imagen standalone, usuario no root (UID 10001), puerto 8080 |

@@ -43,8 +43,8 @@ func main() {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
-	r.Use(middleware.CORSMiddleware())
-	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.CORSMiddleware(middleware.CORSPolicy{AllowedOrigins: cfg.AllowedOrigins, AllowLocalhost: !cfg.IsProduction()}))
+	r.Use(middleware.SecurityHeaders(middleware.ContentSecurityPolicy(cfg.IsProduction())))
 	rateLimiter := middleware.NewRateLimiter(300, time.Minute)
 	r.Use(rateLimiter.Middleware())
 	r.Use(middleware.CSRFProtection(cfg.IsProduction()))
@@ -290,6 +290,23 @@ func main() {
 			commNotes.POST("", middleware.AuthRequired(cfg.JWTSecret), extraHandler.CreateCommunityNote)
 			commNotes.POST("/:id/vote", middleware.AuthRequired(cfg.JWTSecret), extraHandler.VoteCommunityNote)
 		}
+
+		// Configuración pública del cliente: solo valores no secretos (la clave de sitio de reCAPTCHA es pública)
+		recaptchaEnabled := !cfg.RecaptchaBypass && cfg.RecaptchaSiteKey != ""
+		v1.GET("/config/public", func(c *gin.Context) {
+			siteKey := ""
+			if recaptchaEnabled {
+				siteKey = cfg.RecaptchaSiteKey
+			}
+			c.Header("Cache-Control", "public, max-age=300")
+			c.JSON(http.StatusOK, gin.H{
+				"recaptcha": gin.H{
+					"enabled":  recaptchaEnabled,
+					"site_key": siteKey,
+					"actions":  []string{services.RecaptchaActionLogin, services.RecaptchaActionRegister, services.RecaptchaActionCreateCommunity},
+				},
+			})
+		})
 
 		v1.GET("/search/predictive", extraHandler.SearchPredictive)
 		v1.GET("/recommendations/feed", middleware.AuthRequired(cfg.JWTSecret), extraHandler.RecommendationsFeed)

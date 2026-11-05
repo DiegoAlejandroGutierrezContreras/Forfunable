@@ -51,7 +51,7 @@ window.SettingsView = {
       </div>
       <div class="card mt-4 flex flex-wrap items-center justify-between gap-3">
         <div><div class="text-label-lg">Modo ligero</div><div class="text-body-sm text-ink-secondary">No carga imágenes; útil con conexiones lentas o datos limitados.</div></div>
-        <button class="switch ${StatusView.isLite() ? 'on' : ''}" onclick="StatusView.setLite(!StatusView.isLite()); this.classList.toggle('on')" aria-label="Modo ligero"></button>
+        <button class="switch ${StatusView.isLite() ? 'on' : ''}" ${UI.on('click', 'StatusView.toggleLite', UI.EL)} aria-label="Modo ligero"></button>
       </div>`;
   },
 
@@ -63,14 +63,14 @@ window.SettingsView = {
         <div class="card p-5 sm:p-6">
           <h2 class="text-headline-md">Identidad pública</h2>
           <p class="mb-5 mt-1 text-body-sm text-ink-secondary">Así te presentas en publicaciones, comentarios y el directorio de miembros.</p>
-          ${UI.field('edit-avatar', 'Foto de perfil (enlace a una imagen)', { type: 'url', placeholder: 'https://…/foto.jpg', value: me.avatar_url || '', help: 'Ej: https://github.com/tu_usuario.png. Déjalo vacío para usar tu inicial.', attrs: 'oninput="SettingsView.validateProfile(\'edit-avatar\')"' })}
-          ${UI.field('edit-username', 'Nombre de usuario', { value: me.username, attrs: 'autocomplete="username" oninput="SettingsView.validateProfile(\'edit-username\')"' })}
-          ${UI.field('edit-email', 'Correo electrónico (privado)', { type: 'email', value: me.email || '', attrs: 'autocomplete="email" oninput="SettingsView.validateProfile(\'edit-email\')"' })}
+          ${UI.field('edit-avatar', 'Foto de perfil (enlace a una imagen)', { type: 'url', placeholder: 'https://…/foto.jpg', value: me.avatar_url || '', help: 'Ej: https://github.com/tu_usuario.png. Déjalo vacío para usar tu inicial.', attrs: UI.on('input', 'SettingsView.validateProfile', 'edit-avatar') })}
+          ${UI.field('edit-username', 'Nombre de usuario', { value: me.username, attrs: `autocomplete="username" ${UI.on('input', 'SettingsView.validateProfile', 'edit-username')}` })}
+          ${UI.field('edit-email', 'Correo electrónico (privado)', { type: 'email', value: me.email || '', attrs: `autocomplete="email" ${UI.on('input', 'SettingsView.validateProfile', 'edit-email')}` })}
           <div class="mb-1.5 flex justify-between"><label class="label mb-0" for="edit-bio">Biografía</label><span id="edit-bio-count" class="font-mono text-body-sm text-ink-muted"></span></div>
-          <textarea id="edit-bio" class="input" rows="4" maxlength="300" placeholder="Stack, intereses, proyectos…" oninput="SettingsView.validateProfile('edit-bio')">${UI.esc(UI.plain(me.bio || ''))}</textarea>
+          <textarea id="edit-bio" class="input" rows="4" maxlength="300" placeholder="Stack, intereses, proyectos…" ${UI.on('input', 'SettingsView.validateProfile', 'edit-bio')}>${UI.esc(UI.plain(me.bio || ''))}</textarea>
           <div class="mt-6 flex justify-end gap-2 border-t border-line pt-5">
             <a href="/settings" data-link class="btn-ghost">Cancelar</a>
-            <button class="btn-primary px-5" id="btn-save-profile" onclick="SettingsView.saveProfile()">${UI.icon('save', 'text-[18px]')} Guardar cambios</button>
+            <button class="btn-primary px-5" id="btn-save-profile" ${UI.on('click', 'SettingsView.saveProfile')}>${UI.icon('save', 'text-[18px]')} Guardar cambios</button>
           </div>
         </div>
         <div>
@@ -148,7 +148,7 @@ window.SettingsView = {
         <p class="mb-5 mt-1 text-body-sm text-ink-secondary">Se muestra junto a tu foto en el perfil, el chat y el directorio.</p>
         <div class="flex flex-col gap-2" id="presence-options">
           ${opts.map(([v, l, d, c]) => `
-            <button type="button" data-status="${v}" class="flex items-start gap-3 rounded border p-4 text-left transition-colors ${this.me.presence_status === v ? 'border-primary bg-primary/5' : 'border-line bg-surface-base hover:border-line-strong'}" onclick="SettingsView.setPresence('${v}')">
+            <button type="button" data-status="${v}" class="flex items-start gap-3 rounded border p-4 text-left transition-colors ${this.me.presence_status === v ? 'border-primary bg-primary/5' : 'border-line bg-surface-base hover:border-line-strong'}" ${UI.on('click', 'SettingsView.setPresence', v)}>
               <span class="mt-1 h-3 w-3 shrink-0 rounded-full ${c}"></span>
               <span class="flex-1"><span class="block text-label-lg">${l}</span><span class="block text-body-sm text-ink-secondary">${d}</span></span>
               ${this.me.presence_status === v ? UI.icon('check_circle', 'text-primary') : ''}
@@ -196,11 +196,11 @@ window.SettingsView = {
             <div class="flex items-start gap-3 p-4">
               ${UI.icon(i, 'text-ink-secondary')}
               <div class="flex-1"><div class="text-label-lg">${t}</div><div class="text-body-sm text-ink-secondary">${d}</div></div>
-              <button type="button" class="switch ${s[k] ? 'on' : ''}" data-setting="${k}" onclick="this.classList.toggle('on')" aria-label="${t}"></button>
+              <button type="button" class="switch ${s[k] ? 'on' : ''}" data-setting="${k}" ${UI.on('click', 'UI.toggleClass', UI.EL, 'on')} aria-label="${t}"></button>
             </div>`).join('')}
         </div>
         <p class="mt-3 flex items-start gap-2 text-body-sm text-ink-muted">${UI.icon('info', 'text-[16px]')} El centro de notificaciones siempre recibe los avisos. Estas preferencias guardan qué canales externos (correo y push) quieres usar.</p>
-        <div class="mt-5 flex justify-end"><button class="btn-primary px-5" onclick="SettingsView.saveNotifications(this)">${UI.icon('save', 'text-[18px]')} Guardar preferencias</button></div>
+        <div class="mt-5 flex justify-end"><button class="btn-primary px-5" ${UI.on('click', 'SettingsView.saveNotifications', UI.EL)}>${UI.icon('save', 'text-[18px]')} Guardar preferencias</button></div>
       </div>`;
   },
 
@@ -226,13 +226,13 @@ window.SettingsView = {
         <p class="mb-5 mt-1 text-body-sm text-ink-secondary">Necesitas tu contraseña actual. Se guarda cifrada con bcrypt.</p>
         ${UI.field('sec-current', 'Contraseña actual', { type: 'password', attrs: 'autocomplete="current-password"' })}
         <label class="label" for="sec-new">Nueva contraseña</label>
-        <input id="sec-new" type="password" class="input" autocomplete="new-password" oninput="SettingsView.passwordRules()">
+        <input id="sec-new" type="password" class="input" autocomplete="new-password" ${UI.on('input', 'SettingsView.passwordRules')}>
         <ul id="sec-rules" class="mt-2 flex flex-col gap-0.5 text-body-sm text-ink-muted"></ul>
-        <div class="mt-6 flex justify-end"><button class="btn-primary px-5" onclick="SettingsView.changePassword(this)">${UI.icon('key', 'text-[18px]')} Actualizar contraseña</button></div>
+        <div class="mt-6 flex justify-end"><button class="btn-primary px-5" ${UI.on('click', 'SettingsView.changePassword', UI.EL)}>${UI.icon('key', 'text-[18px]')} Actualizar contraseña</button></div>
       </div>
       <div class="card mt-4 flex flex-wrap items-center justify-between gap-3">
         <div><div class="text-label-lg">Sesión en este navegador</div><div class="text-body-sm text-ink-secondary">La sesión se renueva automáticamente mientras la uses.</div></div>
-        <button class="btn-danger-ghost" onclick="Router.logout()">${UI.icon('logout', 'text-[18px]')} Cerrar sesión</button>
+        <button class="btn-danger-ghost" ${UI.on('click', 'Router.logout')}>${UI.icon('logout', 'text-[18px]')} Cerrar sesión</button>
       </div>`;
     this.passwordRules();
   },
@@ -288,7 +288,7 @@ window.SettingsView = {
           <span class="text-body-sm text-ink-secondary">Declaro que soy mayor de edad y entiendo que el contenido +18 puede incluir material sensible. Una declaración falsa puede terminar en la suspensión de la cuenta.</span>
         </label>
         <div class="field-hint" id="age-confirm-hint"></div>
-        <div class="mt-6 flex justify-end"><button class="btn-primary px-5" onclick="SettingsView.verifyAge(this, ${UI.arg(next || '')})">${UI.icon('verified', 'text-[18px]')} Verificar</button></div>
+        <div class="mt-6 flex justify-end"><button class="btn-primary px-5" ${UI.on('click', 'SettingsView.verifyAge', UI.EL, next || '')}>${UI.icon('verified', 'text-[18px]')} Verificar</button></div>
       </div>`;
   },
 

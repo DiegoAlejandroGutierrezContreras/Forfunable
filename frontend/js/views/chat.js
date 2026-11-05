@@ -25,7 +25,7 @@ window.ChatView = {
           <a href="/chat/requests" data-link class="flex items-center gap-3 border-b border-line px-4 py-3 hover:bg-surface-elevated">
             ${UI.icon('move_to_inbox', 'text-secondary')}<span class="flex-1 text-label-lg">Solicitudes</span><span id="chat-req-count" class="chip-community hidden"></span>${UI.icon('chevron_right', 'text-ink-muted')}
           </a>
-          <div class="p-3"><input class="input py-2 text-body-sm" placeholder="Buscar conversación…" oninput="ChatView.filterList(this.value)"></div>
+          <div class="p-3"><input class="input py-2 text-body-sm" placeholder="Buscar conversación…" ${UI.on('input', 'ChatView.filterList', UI.VALUE)}></div>
           <div id="conversations-list" class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">${side || '<div class="skeleton mx-2 h-12"></div>'}</div>
         </aside>
         <section class="card flex min-h-0 flex-col p-0 ${this.activeId ? 'flex' : 'hidden md:flex'}">${inner}</section>
@@ -96,7 +96,7 @@ window.ChatView = {
         <a href="/u/${encodeURIComponent(other)}" data-link class="btn-icon" title="Ver perfil">${UI.icon('person')}</a>
       </header>
       <div id="chat-messages" class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4"></div>
-      <form class="flex items-end gap-2 border-t border-line p-3" onsubmit="ChatView.send(event)">
+      <form class="flex items-end gap-2 border-t border-line p-3" ${UI.on('submit', 'ChatView.send', UI.EVENT)}>
         <textarea id="chat-input" rows="1" maxlength="2000" class="input max-h-32 resize-none" placeholder="Escribe un mensaje… (Enter para enviar, Shift + Enter salto de línea)"></textarea>
         <button class="btn-primary h-[42px]" aria-label="Enviar">${UI.icon('send', 'text-[18px]')}</button>
       </form>`;
@@ -140,7 +140,7 @@ window.ChatView = {
       }).join('') : `<div class="m-auto text-body-sm text-ink-muted">No hay mensajes todavía. ¡Saluda!</div>`;
       if (scroll || atBottom) box.scrollTop = box.scrollHeight;
     } catch (err) {
-      if (scroll) box.innerHTML = UI.error(err, 'ChatView.loadMessages(true)');
+      if (scroll) box.innerHTML = UI.error(err, () => ChatView.loadMessages(true));
     }
   },
 
@@ -184,13 +184,13 @@ window.ChatView = {
           </div>
           <blockquote class="mt-3 border-l-2 border-secondary/50 pl-3 text-body-md text-ink-secondary">${UI.esc(r.initial_message || '')}</blockquote>
           <div class="mt-4 flex flex-wrap justify-end gap-2">
-            <button class="btn-danger-ghost btn-sm" onclick="ChatView.respond(${UI.arg(r.id)}, 'BLOCK', ${UI.arg(r.sender_username)})">${UI.icon('block', 'text-[16px]')} Bloquear</button>
-            <button class="btn-secondary btn-sm" onclick="ChatView.respond(${UI.arg(r.id)}, 'REJECT')">Rechazar</button>
-            <button class="btn-primary btn-sm" onclick="ChatView.respond(${UI.arg(r.id)}, 'ACCEPT', ${UI.arg(r.sender_username)})">${UI.icon('check', 'text-[16px]')} Aceptar</button>
+            <button class="btn-danger-ghost btn-sm" ${UI.on('click', 'ChatView.respond', r.id, 'BLOCK', r.sender_username)}>${UI.icon('block', 'text-[16px]')} Bloquear</button>
+            <button class="btn-secondary btn-sm" ${UI.on('click', 'ChatView.respond', r.id, 'REJECT')}>Rechazar</button>
+            <button class="btn-primary btn-sm" ${UI.on('click', 'ChatView.respond', r.id, 'ACCEPT', r.sender_username)}>${UI.icon('check', 'text-[16px]')} Aceptar</button>
           </div>
         </div>`).join('') : UI.empty({ icon: 'mark_email_read', title: 'No tienes solicitudes pendientes', text: 'Cuando alguien quiera hablar contigo, su presentación aparecerá aquí.' });
     } catch (err) {
-      box.innerHTML = UI.error(err, 'ChatView.requests()');
+      box.innerHTML = UI.error(err, () => ChatView.requests());
     }
   },
 
@@ -230,12 +230,12 @@ window.ChatView = {
         </div>
         ${UI.field('chat-to', 'Para', { placeholder: 'nombre_de_usuario', value: query.to || '', attrs: 'autocomplete="off"' })}
         <div class="mb-1.5 flex justify-between"><label class="label mb-0" for="chat-intro">Mensaje de presentación</label><span id="chat-intro-count" class="font-mono text-body-sm text-ink-muted">0 / 500</span></div>
-        <textarea id="chat-intro" class="input" rows="5" maxlength="500" placeholder="Hola, vi tu publicación sobre… y quería preguntarte…" oninput="document.getElementById('chat-intro-count').textContent = this.value.length + ' / 500'"></textarea>
+        <textarea id="chat-intro" class="input" rows="5" maxlength="500" placeholder="Hola, vi tu publicación sobre… y quería preguntarte…" ${UI.on('input', 'UI.count', UI.EL, 'chat-intro-count', 500)}></textarea>
         <div class="field-hint" id="chat-intro-hint"></div>
         <p class="help">Di quién eres y por qué escribes. Mínimo 10 caracteres.</p>
         <div class="mt-6 flex justify-end gap-2">
           <a href="/chat" data-link class="btn-ghost">Cancelar</a>
-          <button class="btn-primary px-5" onclick="ChatView.sendRequest(this)">${UI.icon('send', 'text-[18px]')} Enviar solicitud</button>
+          <button class="btn-primary px-5" ${UI.on('click', 'ChatView.sendRequest', UI.EL)}>${UI.icon('send', 'text-[18px]')} Enviar solicitud</button>
         </div>
       </div>`);
     this.loadList();

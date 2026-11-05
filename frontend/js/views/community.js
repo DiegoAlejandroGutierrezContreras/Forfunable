@@ -48,7 +48,7 @@ window.CommunityView = {
       <div class="mb-4 flex flex-wrap items-center gap-3">
         <div class="relative min-w-[220px] flex-1">
           ${UI.icon('search', 'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-ink-muted')}
-          <input id="comm-filter" class="input pl-10" placeholder="Filtrar por nombre o descripción…" value="${UI.esc(query.q || '')}" oninput="CommunityView.paintDirectory()">
+          <input id="comm-filter" class="input pl-10" placeholder="Filtrar por nombre o descripción…" value="${UI.esc(query.q || '')}" ${UI.on('input', 'CommunityView.paintDirectory')}>
         </div>
         <div id="comm-sort"></div>
       </div>
@@ -58,7 +58,7 @@ window.CommunityView = {
       this.directory = await window.api.listCommunities();
       this.paintDirectory();
     } catch (err) {
-      document.getElementById('comm-directory').innerHTML = UI.error(err, 'CommunityView.explore()');
+      document.getElementById('comm-directory').innerHTML = UI.error(err, () => CommunityView.explore());
     }
   },
 
@@ -149,11 +149,11 @@ window.CommunityView = {
             ${gated
               ? (pending
                   ? `<a href="/requests" data-link id="btn-subscribe" class="btn-secondary">${UI.icon('hourglass_top', 'text-[18px]')} Solicitud enviada</a>`
-                  : `<button id="btn-subscribe" class="btn-primary" onclick="CommunityExtras.requestModal(${UI.arg(c.id)}, ${UI.arg(c.name)})">${UI.icon('lock_open', 'text-[18px]')} Solicitar acceso</button>`)
-              : `<button id="btn-subscribe" class="${c.is_member ? 'btn-secondary' : 'btn-primary'}" onclick="CommunityView.toggleJoin(${UI.arg(c.id)}, ${UI.arg(c.name)}, ${c.is_member})">${c.is_member ? `${UI.icon('check', 'text-[18px]')} Miembro` : `${UI.icon('group_add', 'text-[18px]')} Unirme`}</button>`}
+                  : `<button id="btn-subscribe" class="btn-primary" ${UI.on('click', 'CommunityExtras.requestModal', c.id, c.name)}>${UI.icon('lock_open', 'text-[18px]')} Solicitar acceso</button>`)
+              : `<button id="btn-subscribe" class="${c.is_member ? 'btn-secondary' : 'btn-primary'}" ${UI.on('click', 'CommunityView.toggleJoin', c.id, c.name, c.is_member)}>${c.is_member ? `${UI.icon('check', 'text-[18px]')} Miembro` : `${UI.icon('group_add', 'text-[18px]')} Unirme`}</button>`}
             ${manage ? `
               <div class="relative">
-                <button class="btn-secondary px-2.5" onclick="PostDetailView.toggleMenu('comm-menu')" aria-label="Gestionar">${UI.icon('more_horiz')}</button>
+                <button class="btn-secondary px-2.5" ${UI.on('click', 'PostDetailView.toggleMenu', 'comm-menu')} aria-label="Gestionar">${UI.icon('more_horiz')}</button>
                 <div id="comm-menu" class="panel absolute right-0 top-full z-20 mt-1 hidden w-60 p-1.5">
                   ${CommunityAdminView.links(c).map(([id, label, icon]) => `<a href="/c/${encodeURIComponent(c.name)}/${id}" data-link class="nav-item">${UI.icon(icon, 'text-[19px]')}${label}</a>`).join('')}
                 </div>

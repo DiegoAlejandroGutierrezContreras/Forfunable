@@ -6,6 +6,8 @@
 window.$main = () => document.getElementById('main-view-container');
 
 window.AuthView = {
+  pickStatus(btn) { document.querySelectorAll('#onb-status [data-status]').forEach(b => b.classList.toggle('border-primary', b === btn)); },
+
   currentTab: 'login',
   failedLogins: 0,
 
@@ -79,8 +81,8 @@ window.AuthView = {
             <a href="/" data-link class="btn-ghost btn-sm">${UI.icon('arrow_back', 'text-[16px]')} Explorar sin cuenta</a>
           </div>
           <div class="mb-6 grid grid-cols-2 rounded border border-line bg-surface-base p-1">
-            <button id="tab-login" class="tab justify-center" onclick="AuthView.setTab('login')">Iniciar sesión</button>
-            <button id="tab-register" class="tab justify-center" onclick="AuthView.setTab('register')">Crear cuenta</button>
+            <button id="tab-login" class="tab justify-center" ${UI.on('click', 'AuthView.setTab', 'login')}>Iniciar sesión</button>
+            <button id="tab-register" class="tab justify-center" ${UI.on('click', 'AuthView.setTab', 'register')}>Crear cuenta</button>
           </div>
           <div id="auth-alert"></div>
           <div id="auth-form-container"></div>
@@ -103,8 +105,8 @@ window.AuthView = {
         <div class="relative">
           ${UI.icon(icon, 'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-ink-muted')}
           <input type="${type}" id="${id}" class="input pl-10 ${type === 'password' ? 'pr-11' : ''}" placeholder="${placeholder}" autocomplete="${autocomplete}"
-            oninput="AuthView.validateField('${id}')" onblur="AuthView.validateField('${id}', true)">
-          ${type === 'password' ? `<button type="button" class="btn-icon absolute right-1 top-1/2 -translate-y-1/2" onclick="AuthView.togglePassword('${id}', this)" aria-label="Mostrar contraseña">${UI.icon('visibility', 'text-[18px]')}</button>` : ''}
+            ${UI.on('input', 'AuthView.validateField', id)} ${UI.on('blur', 'AuthView.validateField', id, true)}>
+          ${type === 'password' ? `<button type="button" class="btn-icon absolute right-1 top-1/2 -translate-y-1/2" ${UI.on('click', 'AuthView.togglePassword', id, UI.EL)} aria-label="Mostrar contraseña">${UI.icon('visibility', 'text-[18px]')}</button>` : ''}
         </div>
         ${id === 'reg-password' ? '<ul class="mt-2 flex flex-col gap-0.5 text-body-sm text-ink-muted" id="reg-password-rules"></ul>' : `<div class="field-hint" id="${id}-hint"></div>`}
       </div>`;
@@ -123,25 +125,25 @@ window.AuthView = {
       box.innerHTML = `
         <h2 class="text-headline-lg">Bienvenido de nuevo</h2>
         <p class="mb-6 mt-1 text-body-md text-ink-secondary">Ingresa con tu correo y contraseña.</p>
-        <form onsubmit="AuthView.handleLogin(event)" novalidate>
+        <form ${UI.on('submit', 'AuthView.handleLogin', UI.EVENT)} novalidate>
           ${this.input('login-email', 'Correo electrónico', 'email', 'nombre@correo.com', 'email', 'alternate_email')}
           ${this.input('login-password', 'Contraseña', 'password', 'Tu contraseña', 'current-password', 'key')}
           <button type="submit" class="btn-primary mt-2 w-full py-3" id="btn-auth-submit">${UI.icon('login', 'text-[19px]')} Entrar</button>
         </form>
-        <p class="mt-6 rounded border border-line bg-surface-base px-4 py-3 text-body-sm text-ink-secondary">¿Aún no tienes cuenta? <button class="font-semibold text-primary hover:underline" onclick="AuthView.setTab('register')">Crea una gratis →</button></p>
+        <p class="mt-6 rounded border border-line bg-surface-base px-4 py-3 text-body-sm text-ink-secondary">¿Aún no tienes cuenta? <button class="font-semibold text-primary hover:underline" ${UI.on('click', 'AuthView.setTab', 'register')}>Crea una gratis →</button></p>
         <p class="mt-4 flex items-center gap-1.5 text-body-sm text-ink-muted">${UI.icon('shield', 'text-[15px] text-primary')} Protegido por reCAPTCHA Enterprise y Cloud Armor</p>`;
     } else {
       box.innerHTML = `
         <h2 class="text-headline-lg">Crea tu cuenta</h2>
         <p class="mb-6 mt-1 text-body-md text-ink-secondary">Empiezas con 10 de karma; con 100 podrás fundar comunidades.</p>
-        <form onsubmit="AuthView.handleRegister(event)" novalidate>
+        <form ${UI.on('submit', 'AuthView.handleRegister', UI.EVENT)} novalidate>
           ${this.input('reg-username', 'Nombre de usuario', 'text', 'tu_usuario', 'username', 'alternate_email')}
           ${this.input('reg-email', 'Correo electrónico', 'email', 'nombre@correo.com', 'email', 'mail')}
           ${this.input('reg-password', 'Contraseña', 'password', 'Crea una contraseña', 'new-password', 'key')}
           <p class="mb-4 text-body-sm text-ink-muted">Al registrarte aceptas las normas de convivencia de las comunidades.</p>
           <button type="submit" class="btn-primary w-full py-3" id="btn-auth-submit">${UI.icon('person_add', 'text-[19px]')} Crear cuenta</button>
         </form>
-        <p class="mt-6 text-center text-body-sm text-ink-secondary">¿Ya tienes cuenta? <button class="font-semibold text-primary hover:underline" onclick="AuthView.setTab('login')">Inicia sesión</button></p>`;
+        <p class="mt-6 text-center text-body-sm text-ink-secondary">¿Ya tienes cuenta? <button class="font-semibold text-primary hover:underline" ${UI.on('click', 'AuthView.setTab', 'login')}>Inicia sesión</button></p>`;
       this.validateField('reg-password');
     }
   },
@@ -287,7 +289,7 @@ window.AuthView = {
       <p class="mt-1 text-body-md text-ink-secondary">Te unirás a las que selecciones y verás sus publicaciones en tu feed.</p>
       <div class="mt-6 grid gap-3 sm:grid-cols-2">
         ${comms.length ? comms.map(c => `
-          <button type="button" class="card card-hover flex items-start gap-3 text-left" data-comm="${UI.esc(c.id)}" onclick="AuthView.toggleCommunity(this)">
+          <button type="button" class="card card-hover flex items-start gap-3 text-left" data-comm="${UI.esc(c.id)}" ${UI.on('click', 'AuthView.toggleCommunity', UI.EL)}>
             <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-secondary/10 text-secondary">${UI.icon('tag')}</span>
             <span class="min-w-0 flex-1">
               <span class="block truncate text-label-lg">c/${UI.esc(c.name)}</span>
@@ -299,7 +301,7 @@ window.AuthView = {
       </div>
       <div class="mt-8 flex justify-between gap-3">
         <a href="/" data-link class="btn-ghost">Omitir</a>
-        <button class="btn-primary px-6" id="onb-next" onclick="AuthView.onbJoin()">Continuar ${UI.icon('arrow_forward', 'text-[18px]')}</button>
+        <button class="btn-primary px-6" id="onb-next" ${UI.on('click', 'AuthView.onbJoin')}>Continuar ${UI.icon('arrow_forward', 'text-[18px]')}</button>
       </div>`;
   },
 
@@ -330,12 +332,12 @@ window.AuthView = {
         <label class="label">Estado</label>
         <div class="grid grid-cols-3 gap-2" id="onb-status">
           ${[['ONLINE', 'En línea', 'bg-primary'], ['BUSY', 'Ocupado', 'bg-danger'], ['OFFLINE', 'Invisible', 'bg-ink-muted']].map(([v, l, c], i) => `
-            <button type="button" data-status="${v}" class="btn-secondary justify-start ${i === 0 ? 'border-primary' : ''}" onclick="document.querySelectorAll('#onb-status [data-status]').forEach(b => b.classList.toggle('border-primary', b === this))"><span class="h-2 w-2 rounded-full ${c}"></span>${l}</button>`).join('')}
+            <button type="button" data-status="${v}" class="btn-secondary justify-start ${i === 0 ? 'border-primary' : ''}" ${UI.on('click', 'AuthView.pickStatus', UI.EL)}><span class="h-2 w-2 rounded-full ${c}"></span>${l}</button>`).join('')}
         </div>
       </div>
       <div class="mt-8 flex justify-end gap-3">
         <a href="/" data-link class="btn-ghost">Omitir</a>
-        <button class="btn-primary px-6" onclick="AuthView.onbFinish(this)">${UI.icon('check', 'text-[18px]')} Terminar</button>
+        <button class="btn-primary px-6" ${UI.on('click', 'AuthView.onbFinish', UI.EL)}>${UI.icon('check', 'text-[18px]')} Terminar</button>
       </div>`;
   },
 

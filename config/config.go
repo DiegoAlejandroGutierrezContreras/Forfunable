@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -24,10 +25,11 @@ type Config struct {
 	Environment            string
 	GINMode                string
 	RecaptchaBypass        bool
-	RecaptchaProjectID     string  // RECAPTCHA_PROJECT_ID: proyecto GCP con reCAPTCHA Enterprise
-	RecaptchaSiteKey       string  // RECAPTCHA_SITE_KEY: clave de sitio (pública) usada por el frontend
-	RecaptchaAPIKey        string  // RECAPTCHA_API_KEY: inyectada desde Secret Manager
-	RecaptchaMinScore      float64 // RECAPTCHA_MIN_SCORE: puntuación mínima aceptada (0.0 - 1.0)
+	RecaptchaProjectID     string   // RECAPTCHA_PROJECT_ID: proyecto GCP con reCAPTCHA Enterprise
+	RecaptchaSiteKey       string   // RECAPTCHA_SITE_KEY: clave de sitio (pública) usada por el frontend
+	RecaptchaAPIKey        string   // RECAPTCHA_API_KEY: inyectada desde Secret Manager
+	RecaptchaMinScore      float64  // RECAPTCHA_MIN_SCORE: puntuación mínima aceptada (0.0 - 1.0)
+	AllowedOrigins         []string // ALLOWED_ORIGINS: orígenes externos (coma) con acceso CORS a la API
 	StorageBucket          string
 	StorageSigningEmail    string
 	StorageCredentialsJSON string
@@ -75,7 +77,15 @@ func LoadConfig() *Config {
 		jwtSecret = "dev-only-jwt-secret-change-in-production"
 	}
 
+	var allowedOrigins []string
+	for _, o := range strings.Split(os.Getenv("ALLOWED_ORIGINS"), ",") {
+		if o = strings.TrimRight(strings.TrimSpace(o), "/"); o != "" && o != "*" {
+			allowedOrigins = append(allowedOrigins, o)
+		}
+	}
+
 	return &Config{
+		AllowedOrigins:         allowedOrigins,
 		Port:                   port,
 		DatabaseURL:            dbURL,
 		InstanceConnectionName: instanceConnName,

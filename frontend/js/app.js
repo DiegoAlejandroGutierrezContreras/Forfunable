@@ -195,7 +195,7 @@ window.Router = {
     }
     box.innerHTML = `
       <div class="relative">
-        <button class="btn-primary btn-sm" onclick="Router.toggleMenu('create-menu')">${UI.icon('add', 'text-[18px]')}<span class="hidden sm:inline">Crear</span>${UI.icon('expand_more', 'text-[16px]')}</button>
+        <button class="btn-primary btn-sm" ${UI.on('click', 'Router.toggleMenu', 'create-menu')}>${UI.icon('add', 'text-[18px]')}<span class="hidden sm:inline">Crear</span>${UI.icon('expand_more', 'text-[16px]')}</button>
         <div id="create-menu" class="panel absolute right-0 top-full z-50 mt-2 hidden w-52 p-1.5">
           <a href="/submit" data-link class="nav-item">${UI.icon('edit_note', 'text-[19px]')}Publicación</a>
           <a href="/c/create" data-link class="nav-item">${UI.icon('group_add', 'text-[19px]')}Comunidad</a>
@@ -205,7 +205,7 @@ window.Router = {
       <a href="/chat" data-link class="btn-icon relative" title="Mensajes">${UI.icon('chat_bubble_outline')}<span id="hdr-chat-badge" class="absolute right-0.5 top-0.5 hidden min-w-[16px] rounded-full bg-secondary px-1 text-center text-[10px] font-bold leading-4 text-primary-ink"></span></a>
       <a href="/notifications" data-link class="btn-icon relative" title="Notificaciones">${UI.icon('notifications')}<span id="hdr-notif-badge" class="absolute right-0.5 top-0.5 hidden min-w-[16px] rounded-full bg-danger px-1 text-center text-[10px] font-bold leading-4 text-white"></span></a>
       <div class="relative">
-        <button class="ml-1 flex items-center rounded-full" onclick="Router.toggleMenu('user-menu')" aria-label="Menú de usuario">${UI.avatar(user, 32)}</button>
+        <button class="ml-1 flex items-center rounded-full" ${UI.on('click', 'Router.toggleMenu', 'user-menu')} aria-label="Menú de usuario">${UI.avatar(user, 32)}</button>
         <div id="user-menu" class="panel absolute right-0 top-full z-50 mt-2 hidden w-60 p-1.5">
           <div class="flex items-center gap-3 border-b border-line px-3 pb-3 pt-1.5">
             ${UI.avatar(user, 36)}
@@ -215,12 +215,14 @@ window.Router = {
             <a href="/profile" data-link class="nav-item">${UI.icon('person', 'text-[19px]')}Mi perfil</a>
             <a href="/saved" data-link class="nav-item">${UI.icon('bookmarks', 'text-[19px]')}Guardados</a>
             <a href="/settings" data-link class="nav-item">${UI.icon('settings', 'text-[19px]')}Ajustes</a>
-            <button class="nav-item w-full text-danger hover:text-danger" onclick="Router.logout()">${UI.icon('logout', 'text-[19px]')}Cerrar sesión</button>
+            <button class="nav-item w-full text-danger hover:text-danger" ${UI.on('click', 'Router.logout')}>${UI.icon('logout', 'text-[19px]')}Cerrar sesión</button>
           </div>
         </div>
       </div>`;
     this.refreshBadges();
   },
+
+  headerSearch(form) { this.navigate('/search?q=' + encodeURIComponent(form.q.value.trim())); },
 
   toggleMenu(id) {
     ['create-menu', 'user-menu'].forEach(m => {
@@ -228,7 +230,7 @@ window.Router = {
       if (el) el.classList.toggle('hidden', m !== id || !el.classList.contains('hidden'));
     });
     const close = e => {
-      if (!e.target.closest('#create-menu, #user-menu, [onclick^="Router.toggleMenu"]')) {
+      if (!e.target.closest('#create-menu, #user-menu, [data-on-click="Router.toggleMenu"]')) {
         ['create-menu', 'user-menu'].forEach(m => document.getElementById(m)?.classList.add('hidden'));
         document.removeEventListener('click', close);
       }

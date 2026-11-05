@@ -24,11 +24,11 @@ window.CreateCommunityView = {
         <span class="font-display text-headline-lg ${allowed ? 'text-primary' : 'text-warning'}">${karma}/${this.MIN_KARMA}</span>
       </div>
 
-      <form class="card p-5 sm:p-6 ${allowed ? '' : 'pointer-events-none opacity-50'}" onsubmit="CreateCommunityView.submit(event)" novalidate>
+      <form class="card p-5 sm:p-6 ${allowed ? '' : 'pointer-events-none opacity-50'}" ${UI.on('submit', 'CreateCommunityView.submit', UI.EVENT)} novalidate>
         <label class="label" for="comm-name">Nombre de la comunidad <span class="text-primary">*</span></label>
         <div class="flex">
           <span class="flex items-center rounded-l border border-r-0 border-line bg-surface-elevated px-3 font-mono text-ink-muted">c/</span>
-          <input id="comm-name" class="input rounded-l-none" maxlength="24" placeholder="react-internals" autocomplete="off" oninput="CreateCommunityView.validate()">
+          <input id="comm-name" class="input rounded-l-none" maxlength="24" placeholder="react-internals" autocomplete="off" ${UI.on('input', 'CreateCommunityView.validate')}>
         </div>
         <div class="field-hint" id="comm-name-hint"></div>
         <p class="help" id="comm-name-help">Entre 3 y 24 caracteres: letras, números, guiones o guiones bajos. No se puede cambiar después.</p>

@@ -2,6 +2,21 @@
 // - Rutas relativas: next.config.js reenvía /api/* al backend en Cloud Run (same-origin).
 // - access_token solo en memoria; nunca en localStorage/sessionStorage.
 // - X-CSRF-Token se copia de la cookie csrf_token en cada mutación.
+// - Todo payload pasa por su esquema Zod (lib/schemas.ts) antes del fetch: apiSend().
+
+import type { ZodType, ZodTypeDef } from 'zod';
+import {
+  CommentCreateSchema,
+  LoginSchema,
+  PostCreateSchema,
+  RegisterSchema,
+  ReportCreateSchema,
+  type CommentCreateInput,
+  type LoginInput,
+  type PostCreateInput,
+  type RegisterInput,
+  type ReportCreateInput,
+} from './schemas';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
@@ -10,6 +25,7 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public field?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -68,3 +84,27 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+// Valida el payload con Zod y, solo si es correcto, lo envía. Un fallo se lanza como ApiError 400
+// (VALIDATION_ERROR) con el campo afectado, igual que lo haría el backend.
+export async function apiSend<T, I>(
+  path: string,
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  schema: ZodType<I, ZodTypeDef, unknown>,
+  payload: unknown,
+): Promise<T> {
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    throw new ApiError(400, 'VALIDATION_ERROR', issue.message, issue.path.join('.'));
+  }
+  return apiFetch<T>(path, { method, body: JSON.stringify(parsed.data) });
+}
+
+export const api = {
+  login: (input: LoginInput) => apiSend<{ access_token: string }, LoginInput>('/auth/login', 'POST', LoginSchema, input),
+  register: (input: RegisterInput) => apiSend<{ access_token: string }, RegisterInput>('/auth/register', 'POST', RegisterSchema, input),
+  createPost: (input: PostCreateInput) => apiSend<{ id: string }, PostCreateInput>('/posts', 'POST', PostCreateSchema, input),
+  createComment: (input: CommentCreateInput) => apiSend<{ id: string }, CommentCreateInput>('/comments', 'POST', CommentCreateSchema, input),
+  createReport: (input: ReportCreateInput) => apiSend<{ id: string }, ReportCreateInput>('/reports', 'POST', ReportCreateSchema, input),
+};

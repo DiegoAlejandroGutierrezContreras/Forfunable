@@ -34,7 +34,7 @@
     let data;
     try { data = await window.api.listSessions(); } catch (err) {
       if (err.error === 'FEATURE_UNAVAILABLE') return unavailable(panel);
-      panel.innerHTML = UI.error(err, "SettingsView.render('sessions')");
+      panel.innerHTML = UI.error(err, () => SettingsView.render('sessions'));
       return;
     }
     const items = data.items || [];
@@ -46,7 +46,7 @@
             <h2 class="text-headline-md">Sesiones activas</h2>
             <p class="mt-1 text-body-sm text-ink-secondary">${items.length} ${items.length === 1 ? 'dispositivo tiene' : 'dispositivos tienen'} tu cuenta abierta. Si no reconoces alguno, ciérralo y cambia tu contraseña.</p>
           </div>
-          <button class="btn-danger-ghost" ${others ? '' : 'disabled'} onclick="SettingsView.revokeOthers()">${UI.icon('phonelink_erase', 'text-[18px]')} Cerrar las demás</button>
+          <button class="btn-danger-ghost" ${others ? '' : 'disabled'} ${UI.on('click', 'SettingsView.revokeOthers')}>${UI.icon('phonelink_erase', 'text-[18px]')} Cerrar las demás</button>
         </div>
         <div class="mt-5 divide-y divide-line rounded border border-line bg-surface-base">
           ${items.map(s => {
@@ -59,8 +59,8 @@
                   <div class="font-mono text-body-sm text-ink-muted">${UI.esc(s.ip_address || 'IP desconocida')} · inicio ${window.utils.formatTime(s.created_at)} · activa ${window.utils.formatTime(s.last_seen_at)}</div>
                 </div>
                 ${s.current
-                  ? `<button class="btn-ghost btn-sm" onclick="Router.logout()">${UI.icon('logout', 'text-[17px]')} Cerrar sesión</button>`
-                  : `<button class="btn-danger-ghost btn-sm" onclick="SettingsView.revokeSession(${UI.arg(s.id)})">${UI.icon('close', 'text-[17px]')} Cerrar</button>`}
+                  ? `<button class="btn-ghost btn-sm" ${UI.on('click', 'Router.logout')}>${UI.icon('logout', 'text-[17px]')} Cerrar sesión</button>`
+                  : `<button class="btn-danger-ghost btn-sm" ${UI.on('click', 'SettingsView.revokeSession', s.id)}>${UI.icon('close', 'text-[17px]')} Cerrar</button>`}
               </div>`;
           }).join('') || '<p class="p-4 text-body-sm text-ink-muted">No hay sesiones registradas.</p>'}
         </div>
@@ -107,7 +107,7 @@
     let sum;
     try { sum = await window.api.exportSummary(); } catch (err) {
       if (err.error === 'FEATURE_UNAVAILABLE') return unavailable(panel);
-      panel.innerHTML = UI.error(err, "SettingsView.render('data')");
+      panel.innerHTML = UI.error(err, () => SettingsView.render('data'));
       return;
     }
     const counts = sum.counts || {};
@@ -123,7 +123,7 @@
         </div>
         <div class="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-line pt-5">
           <span class="text-body-sm text-ink-muted">Formato forfunable-export/v1 · JSON UTF-8</span>
-          <button class="btn-primary px-5" id="btn-export" onclick="SettingsView.generateExport(this)">${UI.icon('package_2', 'text-[18px]')} Generar archivo</button>
+          <button class="btn-primary px-5" id="btn-export" ${UI.on('click', 'SettingsView.generateExport', UI.EL)}>${UI.icon('package_2', 'text-[18px]')} Generar archivo</button>
         </div>
       </div>
       <div id="export-ready" class="mt-4"></div>`;
@@ -184,11 +184,11 @@
             ${hash ? `<dt class="text-ink-muted">SHA-256</dt><dd class="break-all text-secondary" id="export-hash">${hash}</dd>` : ''}
           </dl>
           <div class="mt-4 flex flex-wrap items-center gap-2">
-            <button class="btn-primary" onclick="SettingsView.downloadExport('json')">${UI.icon('download', 'text-[18px]')} Descargar JSON</button>
+            <button class="btn-primary" ${UI.on('click', 'SettingsView.downloadExport', 'json')}>${UI.icon('download', 'text-[18px]')} Descargar JSON</button>
             ${tables.length ? `
               <select id="export-table" class="input w-auto py-2 text-body-sm">${tables.map(([k, v]) => `<option value="${k}">${(labels[k] || [k])[0]} (${v.length})</option>`).join('')}</select>
-              <button class="btn-secondary" onclick="SettingsView.downloadExport('csv')">${UI.icon('table_view', 'text-[18px]')} Descargar CSV</button>` : ''}
-            ${hash ? `<button class="btn-ghost btn-sm ml-auto" onclick="navigator.clipboard && navigator.clipboard.writeText(${UI.arg(hash)}).then(() => utils.showToast('Huella copiada', 'info'))">${UI.icon('content_copy', 'text-[17px]')} Copiar huella</button>` : ''}
+              <button class="btn-secondary" ${UI.on('click', 'SettingsView.downloadExport', 'csv')}>${UI.icon('table_view', 'text-[18px]')} Descargar CSV</button>` : ''}
+            ${hash ? `<button class="btn-ghost btn-sm ml-auto" ${UI.on('click', 'UI.copy', hash, 'Huella copiada')}>${UI.icon('content_copy', 'text-[17px]')} Copiar huella</button>` : ''}
           </div>
           <p class="mt-3 text-body-sm text-ink-muted">Comprueba la integridad con <code>sha256sum ${UI.esc(this._export.name)}.json</code>.</p>
         </div>`;
@@ -240,15 +240,15 @@
             <option>No encuentro contenido que me interese</option>
             <option>Otro motivo</option>
           </select>
-          ${UI.field('del-username', `Escribe <span class="font-mono text-ink">${UI.esc(me.username)}</span> para confirmar`, { attrs: 'autocomplete="off" oninput="SettingsView.deleteReady()"' })}
-          ${UI.field('del-password', 'Tu contraseña', { type: 'password', attrs: 'autocomplete="current-password" oninput="SettingsView.deleteReady()"' })}
+          ${UI.field('del-username', `Escribe <span class="font-mono text-ink">${UI.esc(me.username)}</span> para confirmar`, { attrs: `autocomplete="off" ${UI.on('input', 'SettingsView.deleteReady')}` })}
+          ${UI.field('del-password', 'Tu contraseña', { type: 'password', attrs: `autocomplete="current-password" ${UI.on('input', 'SettingsView.deleteReady')}` })}
           <label class="flex cursor-pointer items-start gap-3 rounded border border-line bg-surface-base p-4">
-            <input id="del-ack" type="checkbox" class="mt-1 h-4 w-4 accent-[#ff5252]" onchange="SettingsView.deleteReady()">
+            <input id="del-ack" type="checkbox" class="mt-1 h-4 w-4 accent-[#ff5252]" ${UI.on('change', 'SettingsView.deleteReady')}>
             <span class="text-body-sm text-ink-secondary">Entiendo que, si no cancelo en 14 días, la eliminación es definitiva.</span>
           </label>
           <div class="mt-6 flex justify-end gap-2">
             <a href="/settings" data-link class="btn-ghost">Cancelar</a>
-            <button class="btn-danger px-5" id="btn-delete" disabled onclick="SettingsView.requestDeletion(this)">${UI.icon('person_remove', 'text-[18px]')} Eliminar mi cuenta</button>
+            <button class="btn-danger px-5" id="btn-delete" disabled ${UI.on('click', 'SettingsView.requestDeletion', UI.EL)}>${UI.icon('person_remove', 'text-[18px]')} Eliminar mi cuenta</button>
           </div>
         </div>
       </div>`;
@@ -315,8 +315,8 @@ window.AccountView = {
           <p class="mt-2 text-body-sm text-ink-muted">Solicitada ${new Date(d.requested_at).toLocaleString('es')}${d.reason ? ` · «${UI.esc(d.reason)}»` : ''}</p>
           ${logged
             ? `<div class="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-                 <button class="btn-primary px-5" onclick="AccountView.cancel(this)">${UI.icon('undo', 'text-[18px]')} Cancelar eliminación y conservar mi cuenta</button>
-                 <button class="btn-ghost" onclick="Router.logout()">Salir</button>
+                 <button class="btn-primary px-5" ${UI.on('click', 'AccountView.cancel', UI.EL)}>${UI.icon('undo', 'text-[18px]')} Cancelar eliminación y conservar mi cuenta</button>
+                 <button class="btn-ghost" ${UI.on('click', 'Router.logout')}>Salir</button>
                </div>`
             : `<p class="mt-6 text-body-md text-ink-secondary">Hemos cerrado todas tus sesiones. Si cambias de opinión, inicia sesión antes de esa fecha y cancela la eliminación.</p>
                <div class="mt-4 flex justify-center gap-2"><a href="/login" data-link class="btn-secondary">Iniciar sesión</a><a href="/" data-link class="btn-ghost">Ir al inicio</a></div>`}

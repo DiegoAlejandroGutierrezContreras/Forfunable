@@ -11,7 +11,7 @@ window.SavedView = {
   async render(query = {}) {
     this.active = query.collection || '';
     $main().innerHTML = `
-      ${UI.pageHeader('Guardados', 'Lo que quieres leer después, organizado en colecciones privadas.', `<button class="btn-secondary" onclick="SavedView.collectionModal()">${UI.icon('create_new_folder', 'text-[18px]')} Nueva colección</button>`, 'bookmarks')}
+      ${UI.pageHeader('Guardados', 'Lo que quieres leer después, organizado en colecciones privadas.', `<button class="btn-secondary" ${UI.on('click', 'SavedView.collectionModal')}>${UI.icon('create_new_folder', 'text-[18px]')} Nueva colección</button>`, 'bookmarks')}
       <div class="grid gap-4 lg:grid-cols-[230px_1fr]">
         <nav id="saved-collections" class="card flex h-fit flex-col gap-0.5 p-2">${UI.skeletonPosts(1)}</nav>
         <div id="saved-list" class="flex flex-col gap-3">${UI.skeletonPosts(2)}</div>
@@ -26,7 +26,7 @@ window.SavedView = {
       this.items = items;
     } catch (err) {
       if (err.error === 'FEATURE_UNAVAILABLE') return this.unavailable();
-      document.getElementById('saved-list').innerHTML = UI.error(err, 'SavedView.load()');
+      document.getElementById('saved-list').innerHTML = UI.error(err, () => SavedView.load());
       return;
     }
     this.paintCollections();
@@ -65,8 +65,8 @@ window.SavedView = {
           <p class="mt-1 font-mono text-body-sm text-ink-muted">${col.items_count} elementos · creada ${window.utils.formatTime(col.created_at)}</p>
         </div>
         <div class="flex gap-1">
-          <button class="btn-ghost btn-sm" onclick="SavedView.collectionModal(${UI.arg(col.id)})">${UI.icon('edit', 'text-[17px]')} Editar</button>
-          <button class="btn-danger-ghost btn-sm" onclick="SavedView.deleteCollection(${UI.arg(col.id)})">${UI.icon('delete', 'text-[17px]')} Eliminar</button>
+          <button class="btn-ghost btn-sm" ${UI.on('click', 'SavedView.collectionModal', col.id)}>${UI.icon('edit', 'text-[17px]')} Editar</button>
+          <button class="btn-danger-ghost btn-sm" ${UI.on('click', 'SavedView.deleteCollection', col.id)}>${UI.icon('delete', 'text-[17px]')} Eliminar</button>
         </div>
       </div>` : '';
     if (!this.items.length) {
@@ -98,10 +98,10 @@ window.SavedView = {
         ${s.note ? `<p class="mt-3 flex items-start gap-2 rounded border border-line bg-surface-base px-3 py-2 text-body-sm text-ink-secondary">${UI.icon('sticky_note_2', 'text-[16px] text-warning')}${UI.esc(s.note)}</p>` : ''}
         <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
           <label class="sr-only" for="mv-${UI.esc(p.id)}">Mover a colección</label>
-          <select id="mv-${UI.esc(p.id)}" class="input w-auto py-1.5 text-body-sm" onchange="SavedView.move(${UI.arg(p.id)}, this.value)">${options}</select>
-          <button class="btn-ghost btn-sm" onclick="SavedView.noteModal(${UI.arg(p.id)})">${UI.icon('edit_note', 'text-[17px]')} ${s.note ? 'Editar nota' : 'Añadir nota'}</button>
+          <select id="mv-${UI.esc(p.id)}" class="input w-auto py-1.5 text-body-sm" ${UI.on('change', 'SavedView.move', p.id, UI.VALUE)}>${options}</select>
+          <button class="btn-ghost btn-sm" ${UI.on('click', 'SavedView.noteModal', p.id)}>${UI.icon('edit_note', 'text-[17px]')} ${s.note ? 'Editar nota' : 'Añadir nota'}</button>
           <span class="ml-auto font-mono text-body-sm text-ink-muted">${p.net_votes || 0} votos · ${p.comments_count || 0} comentarios</span>
-          <button class="btn-danger-ghost btn-sm" onclick="SavedView.remove(${UI.arg(p.id)})">${UI.icon('bookmark_remove', 'text-[17px]')} Quitar</button>
+          <button class="btn-danger-ghost btn-sm" ${UI.on('click', 'SavedView.remove', p.id)}>${UI.icon('bookmark_remove', 'text-[17px]')} Quitar</button>
         </div>
       </article>`;
   },
@@ -123,7 +123,7 @@ window.SavedView = {
       title: 'Nota privada', icon: 'sticky_note_2', tone: 'warning',
       body: `<p class="mb-3">Solo tú la ves. Útil para recordar por qué lo guardaste.</p>
         <textarea id="saved-note" class="input" rows="3" maxlength="500" placeholder="Ej: revisar el benchmark de la sección 3">${UI.esc(UI.plain(s.note || ''))}</textarea>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-primary" onclick="SavedView.saveNote(${UI.arg(postId)})">Guardar nota</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-primary" ${UI.on('click', 'SavedView.saveNote', postId)}>Guardar nota</button>`
     });
     document.getElementById('saved-note').focus();
   },
@@ -155,7 +155,7 @@ window.SavedView = {
       title: col ? 'Editar colección' : 'Nueva colección', icon: 'create_new_folder', tone: 'secondary',
       body: `${UI.field('col-name', 'Nombre', { value: col ? UI.plain(col.name) : '', placeholder: 'Ej: Lecturas de Go', attrs: 'maxlength="60"' })}
         ${UI.field('col-desc', 'Descripción (opcional)', { value: col ? UI.plain(col.description) : '', textarea: true, rows: 2 })}`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-primary" id="col-save" onclick="SavedView.saveCollection(${UI.arg(id)})">${col ? 'Guardar' : 'Crear colección'}</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-primary" id="col-save" ${UI.on('click', 'SavedView.saveCollection', id)}>${col ? 'Guardar' : 'Crear colección'}</button>`
     });
     document.getElementById('col-name').focus();
   },
@@ -202,11 +202,16 @@ window.SavedView = {
     UI.modal({
       title: 'Guardar en colección', icon: 'bookmark_add', tone: 'primary',
       body: `<div class="flex flex-col gap-1.5">
-          <button class="nav-item w-full" onclick="SavedView.saveTo(${UI.arg(postId)}, '')">${UI.icon('inbox', 'text-[19px]')}Sin colección</button>
-          ${cols.map(c => `<button class="nav-item w-full justify-between" onclick="SavedView.saveTo(${UI.arg(postId)}, ${UI.arg(c.id)})"><span class="flex items-center gap-3">${UI.icon('folder', 'text-[19px]')}${UI.esc(c.name)}</span><span class="font-mono text-label-sm text-ink-muted">${c.items_count}</span></button>`).join('')}
+          <button class="nav-item w-full" ${UI.on('click', 'SavedView.saveTo', postId, '')}>${UI.icon('inbox', 'text-[19px]')}Sin colección</button>
+          ${cols.map(c => `<button class="nav-item w-full justify-between" ${UI.on('click', 'SavedView.saveTo', postId, c.id)}><span class="flex items-center gap-3">${UI.icon('folder', 'text-[19px]')}${UI.esc(c.name)}</span><span class="font-mono text-label-sm text-ink-muted">${c.items_count}</span></button>`).join('')}
         </div>`,
-      actions: `<button class="btn-secondary" onclick="SavedView._pendingPost = ${UI.arg(postId)}; SavedView.collectionModal()">${UI.icon('add', 'text-[18px]')} Nueva colección</button>`
+      actions: `<button class="btn-secondary" ${UI.on('click', 'SavedView.newCollectionFor', postId)}>${UI.icon('add', 'text-[18px]')} Nueva colección</button>`
     });
+  },
+
+  newCollectionFor(postId) {
+    this._pendingPost = postId;
+    this.collectionModal();
   },
 
   async saveTo(postId, collectionId) {

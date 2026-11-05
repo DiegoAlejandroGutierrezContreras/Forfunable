@@ -15,6 +15,7 @@ export function middleware(request: NextRequest) {
     "connect-src 'self'",
     'frame-src https://www.google.com/recaptcha/',
     "frame-ancestors 'none'",
+    "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; ');
@@ -27,6 +28,10 @@ export function middleware(request: NextRequest) {
   response.headers.set('Content-Security-Policy', csp);
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // HSTS: el navegador solo usará HTTPS durante un año (se ignora en http://localhost)
+  response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
   return response;
 }
 

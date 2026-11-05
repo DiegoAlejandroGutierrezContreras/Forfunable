@@ -49,18 +49,18 @@ window.PostDetailView = {
             </div>
           </div>
           <div class="relative">
-            <button class="btn-icon" onclick="PostDetailView.toggleMenu('post-menu')" aria-label="Más acciones">${UI.icon('more_horiz')}</button>
+            <button class="btn-icon" ${UI.on('click', 'PostDetailView.toggleMenu', 'post-menu')} aria-label="Más acciones">${UI.icon('more_horiz')}</button>
             <div id="post-menu" class="panel absolute right-0 top-full z-20 mt-1 hidden w-56 p-1.5">
               ${isAuthor ? `
                 <a href="${link}/edit" data-link class="nav-item">${UI.icon('edit', 'text-[19px]')}Editar publicación</a>
-                <button class="nav-item w-full" onclick="PostDetailView.flairModal()">${UI.icon('sell', 'text-[19px]')}Cambiar flair</button>
-                <button class="nav-item w-full text-danger hover:text-danger" onclick="PostDetailView.deletePost(${UI.arg(post.id)})">${UI.icon('delete', 'text-[19px]')}Eliminar</button>` : ''}
-              ${me && !isAuthor ? `<button class="nav-item w-full" onclick="ModerationView.reportModal(${UI.arg(post.id)}, 'POST')">${UI.icon('flag', 'text-[19px]')}Reportar</button>` : ''}
-              ${isMod && !isAuthor ? `<button class="nav-item w-full text-danger hover:text-danger" onclick="ModerationView.forceRemove(${UI.arg(post.id)}, 'POST')">${UI.icon('gavel', 'text-[19px]')}Retirar por moderación</button>` : ''}
-              ${isMod && !isAuthor ? `<button class="nav-item w-full" onclick="PostDetailView.flairModal()">${UI.icon('sell', 'text-[19px]')}Cambiar flair</button>` : ''}
+                <button class="nav-item w-full" ${UI.on('click', 'PostDetailView.flairModal')}>${UI.icon('sell', 'text-[19px]')}Cambiar flair</button>
+                <button class="nav-item w-full text-danger hover:text-danger" ${UI.on('click', 'PostDetailView.deletePost', post.id)}>${UI.icon('delete', 'text-[19px]')}Eliminar</button>` : ''}
+              ${me && !isAuthor ? `<button class="nav-item w-full" ${UI.on('click', 'ModerationView.reportModal', post.id, 'POST')}>${UI.icon('flag', 'text-[19px]')}Reportar</button>` : ''}
+              ${isMod && !isAuthor ? `<button class="nav-item w-full text-danger hover:text-danger" ${UI.on('click', 'ModerationView.forceRemove', post.id, 'POST')}>${UI.icon('gavel', 'text-[19px]')}Retirar por moderación</button>` : ''}
+              ${isMod && !isAuthor ? `<button class="nav-item w-full" ${UI.on('click', 'PostDetailView.flairModal')}>${UI.icon('sell', 'text-[19px]')}Cambiar flair</button>` : ''}
               <a href="${link}/history" data-link class="nav-item">${UI.icon('history', 'text-[19px]')}Historial de versiones</a>
-              ${me ? `<button class="nav-item w-full" onclick="SavedView.saveToModal(${UI.arg(post.id)})">${UI.icon('bookmark_add', 'text-[19px]')}Guardar en colección…</button>` : ''}
-              <button class="nav-item w-full" onclick="UI.share(${UI.arg(link)})">${UI.icon('link', 'text-[19px]')}Copiar enlace</button>
+              ${me ? `<button class="nav-item w-full" ${UI.on('click', 'SavedView.saveToModal', post.id)}>${UI.icon('bookmark_add', 'text-[19px]')}Guardar en colección…</button>` : ''}
+              <button class="nav-item w-full" ${UI.on('click', 'UI.share', link)}>${UI.icon('link', 'text-[19px]')}Copiar enlace</button>
             </div>
           </div>
         </header>
@@ -74,10 +74,10 @@ window.PostDetailView = {
 
         <footer class="mt-6 flex flex-wrap items-center gap-2 border-t border-line pt-4">
           ${UI.vote('post', post.id, post.net_votes, post.user_vote)}
-          <a href="#comments" class="btn-ghost btn-sm" onclick="event.preventDefault(); document.getElementById('comments').scrollIntoView({ behavior: 'smooth' })">${UI.icon('chat_bubble_outline', 'text-[18px]')} <span id="comments-count">${post.comments_count || 0}</span> comentarios</a>
-          <button class="btn-ghost btn-sm" onclick="UI.share(${UI.arg(link)})">${UI.icon('share', 'text-[18px]')} Compartir</button>
+          <a href="#comments" class="btn-ghost btn-sm" ${UI.on('click.prevent', 'PostDetailView.scrollToComments')}>${UI.icon('chat_bubble_outline', 'text-[18px]')} <span id="comments-count">${post.comments_count || 0}</span> comentarios</a>
+          <button class="btn-ghost btn-sm" ${UI.on('click', 'UI.share', link)}>${UI.icon('share', 'text-[18px]')} Compartir</button>
           ${me ? UI.saveButton(post.id, true) : ''}
-          ${me ? `<button class="btn-ghost btn-sm" onclick="ModerationView.proposeNote(${UI.arg(post.id)})">${UI.icon('fact_check', 'text-[18px]')} Proponer nota</button>` : ''}
+          ${me ? `<button class="btn-ghost btn-sm" ${UI.on('click', 'ModerationView.proposeNote', post.id)}>${UI.icon('fact_check', 'text-[18px]')} Proponer nota</button>` : ''}
         </footer>
       </article>
 
@@ -90,7 +90,7 @@ window.PostDetailView = {
           ${this.composer('new-comment', 'Aporta contexto, datos o una pregunta concreta…')}
           <div class="mt-3 flex items-center justify-between gap-3">
             <span class="text-body-sm text-ink-muted">Ctrl + Enter para enviar</span>
-            <button class="btn-primary" id="btn-new-comment" onclick="PostDetailView.submitComment(null)">Publicar comentario</button>
+            <button class="btn-primary" id="btn-new-comment" ${UI.on('click', 'PostDetailView.submitComment', null)}>Publicar comentario</button>
           </div>
         </section>` : `
         <div class="card mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -138,8 +138,8 @@ window.PostDetailView = {
       title: 'Flair de la publicación', icon: 'sell', tone: 'secondary',
       body: `<p class="mb-3">Ayuda a filtrar el contenido de c/${UI.esc(post.community_name)}.</p>
         <div class="flex flex-wrap gap-2">
-          <button class="chip-neutral cursor-pointer py-1 ${!current ? 'ring-1 ring-primary' : ''}" onclick="PostDetailView.setFlair('')">Sin flair</button>
-          ${flairs.map(f => `<button class="cursor-pointer rounded-chip ${f.id === current ? 'ring-1 ring-primary' : ''}" onclick="PostDetailView.setFlair(${UI.arg(f.id)})">${UI.flairChip(f)}</button>`).join('')}
+          <button class="chip-neutral cursor-pointer py-1 ${!current ? 'ring-1 ring-primary' : ''}" ${UI.on('click', 'PostDetailView.setFlair', '')}>Sin flair</button>
+          ${flairs.map(f => `<button class="cursor-pointer rounded-chip ${f.id === current ? 'ring-1 ring-primary' : ''}" ${UI.on('click', 'PostDetailView.setFlair', f.id)}>${UI.flairChip(f)}</button>`).join('')}
         </div>`
     });
   },
@@ -155,11 +155,14 @@ window.PostDetailView = {
     }
   },
 
+  scrollToComments() { document.getElementById('comments').scrollIntoView({ behavior: 'smooth' }); },
+  closeReply(commentId) { const box = document.getElementById(`reply-box-${commentId}`); if (box) box.innerHTML = ''; },
+
   toggleMenu(id) {
     const el = document.getElementById(id);
     el.classList.toggle('hidden');
     if (!el.classList.contains('hidden')) {
-      const close = e => { if (!el.contains(e.target) && !e.target.closest(`[onclick*="${id}"]`)) { el.classList.add('hidden'); document.removeEventListener('click', close); } };
+      const close = e => { if (!el.contains(e.target) && !e.target.closest(`[data-args-click*="${id}"]`)) { el.classList.add('hidden'); document.removeEventListener('click', close); } };
       setTimeout(() => document.addEventListener('click', close), 0);
     }
   },
@@ -178,7 +181,7 @@ window.PostDetailView = {
     return `
       <div class="overflow-hidden rounded border border-line bg-surface-base focus-within:border-primary">
         <div class="flex gap-0.5 border-b border-line px-1.5 py-1">
-          ${tools.map(([i, a, b]) => `<button type="button" class="btn-icon p-1" onclick="PostDetailView.wrap('${id}', ${UI.arg(a)}, ${UI.arg(b)})">${UI.icon(i, 'text-[17px]')}</button>`).join('')}
+          ${tools.map(([i, a, b]) => `<button type="button" class="btn-icon p-1" ${UI.on('click', 'PostDetailView.wrap', id, a, b)}>${UI.icon(i, 'text-[17px]')}</button>`).join('')}
         </div>
         <textarea id="${id}" rows="4" maxlength="5000" class="block w-full resize-y bg-transparent p-3 text-body-md text-ink outline-none placeholder:text-ink-muted" placeholder="${UI.esc(placeholder)}">${UI.esc(value)}</textarea>
       </div>`;
@@ -225,7 +228,7 @@ window.PostDetailView = {
       this.comments = await window.api.getPostComments(this.post.id);
       this.paintComments();
     } catch (err) {
-      box.innerHTML = UI.error(err, 'PostDetailView.loadComments()');
+      box.innerHTML = UI.error(err, () => PostDetailView.loadComments());
     }
   },
 
@@ -282,17 +285,17 @@ window.PostDetailView = {
         ${UI.userLink(c.author_username)}
         ${isOp ? '<span class="chip-community">Autor</span>' : ''}
         <span class="text-ink-muted">· ${window.utils.formatTime(c.created_at)}</span>
-        ${replies ? `<button class="ml-auto font-mono text-body-sm text-ink-muted hover:text-ink" onclick="PostDetailView.toggleCollapse(${UI.arg(c.id)})">${collapsed ? `[+] ${replies} ${replies === 1 ? 'respuesta' : 'respuestas'}` : '[–] colapsar'}</button>` : ''}
+        ${replies ? `<button class="ml-auto font-mono text-body-sm text-ink-muted hover:text-ink" ${UI.on('click', 'PostDetailView.toggleCollapse', c.id)}>${collapsed ? `[+] ${replies} ${replies === 1 ? 'respuesta' : 'respuestas'}` : '[–] colapsar'}</button>` : ''}
       </div>
       <div id="comment-content-${UI.esc(c.id)}" class="prose-post mt-2">${window.utils.renderMarkdown(c.content)}</div>
       <div class="mt-2 flex flex-wrap items-center gap-1">
         ${UI.vote('comment', c.id, c.net_votes, c.user_vote)}
-        ${me ? `<button class="btn-ghost btn-sm" onclick="PostDetailView.openReply(${UI.arg(c.id)})">${UI.icon('reply', 'text-[17px]')} Responder</button>
-        <button class="btn-ghost btn-sm" onclick="PostDetailView.openReply(${UI.arg(c.id)}, true)">${UI.icon('format_quote', 'text-[17px]')} Citar</button>` : ''}
-        ${mine ? `<button class="btn-ghost btn-sm" onclick="PostDetailView.editComment(${UI.arg(c.id)})">${UI.icon('edit', 'text-[17px]')} Editar</button>
-        <button class="btn-danger-ghost btn-sm" onclick="PostDetailView.deleteComment(${UI.arg(c.id)})">${UI.icon('delete', 'text-[17px]')} Eliminar</button>` : ''}
-        ${me && !mine ? `<button class="btn-ghost btn-sm" onclick="ModerationView.reportModal(${UI.arg(c.id)}, 'COMMENT')">${UI.icon('flag', 'text-[17px]')} Reportar</button>` : ''}
-        ${isMod && !mine ? `<button class="btn-danger-ghost btn-sm" onclick="ModerationView.forceRemove(${UI.arg(c.id)}, 'COMMENT')">${UI.icon('gavel', 'text-[17px]')} Retirar</button>` : ''}
+        ${me ? `<button class="btn-ghost btn-sm" ${UI.on('click', 'PostDetailView.openReply', c.id)}>${UI.icon('reply', 'text-[17px]')} Responder</button>
+        <button class="btn-ghost btn-sm" ${UI.on('click', 'PostDetailView.openReply', c.id, true)}>${UI.icon('format_quote', 'text-[17px]')} Citar</button>` : ''}
+        ${mine ? `<button class="btn-ghost btn-sm" ${UI.on('click', 'PostDetailView.editComment', c.id)}>${UI.icon('edit', 'text-[17px]')} Editar</button>
+        <button class="btn-danger-ghost btn-sm" ${UI.on('click', 'PostDetailView.deleteComment', c.id)}>${UI.icon('delete', 'text-[17px]')} Eliminar</button>` : ''}
+        ${me && !mine ? `<button class="btn-ghost btn-sm" ${UI.on('click', 'ModerationView.reportModal', c.id, 'COMMENT')}>${UI.icon('flag', 'text-[17px]')} Reportar</button>` : ''}
+        ${isMod && !mine ? `<button class="btn-danger-ghost btn-sm" ${UI.on('click', 'ModerationView.forceRemove', c.id, 'COMMENT')}>${UI.icon('gavel', 'text-[17px]')} Retirar</button>` : ''}
       </div>
       <div id="reply-box-${UI.esc(c.id)}"></div>`;
   },
@@ -312,8 +315,8 @@ window.PostDetailView = {
       <div class="mt-3">
         ${this.composer(`reply-${commentId}`, `Responde a @${c.author_username}…`, quoted)}
         <div class="mt-2 flex justify-end gap-2">
-          <button class="btn-ghost btn-sm" onclick="document.getElementById('reply-box-${UI.esc(commentId)}').innerHTML = ''">Cancelar</button>
-          <button class="btn-primary btn-sm" onclick="PostDetailView.submitComment(${UI.arg(commentId)})">Responder</button>
+          <button class="btn-ghost btn-sm" ${UI.on('click', 'PostDetailView.closeReply', commentId)}>Cancelar</button>
+          <button class="btn-primary btn-sm" ${UI.on('click', 'PostDetailView.submitComment', commentId)}>Responder</button>
         </div>
       </div>`;
     const ta = document.getElementById(`reply-${commentId}`);
@@ -349,8 +352,8 @@ window.PostDetailView = {
     box.innerHTML = `
       ${this.composer(`edit-${id}`, '', UI.plain(c.content))}
       <div class="mt-2 flex justify-end gap-2">
-        <button class="btn-ghost btn-sm" onclick="PostDetailView.paintComments()">Cancelar</button>
-        <button class="btn-primary btn-sm" onclick="PostDetailView.saveComment(${UI.arg(id)})">Guardar cambios</button>
+        <button class="btn-ghost btn-sm" ${UI.on('click', 'PostDetailView.paintComments')}>Cancelar</button>
+        <button class="btn-primary btn-sm" ${UI.on('click', 'PostDetailView.saveComment', id)}>Guardar cambios</button>
       </div>`;
     this.bindComposer(`edit-${id}`, () => this.saveComment(id));
     document.getElementById(`edit-${id}`).focus();

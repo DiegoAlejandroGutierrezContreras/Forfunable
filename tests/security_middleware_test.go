@@ -144,3 +144,87 @@ func TestRequireRecaptcha(t *testing.T) {
 		})
 	}
 }
+
+func setupCORSTestServer(policy middleware.CORSPolicy) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.CORSMiddleware(policy))
+	r.Use(middleware.SecurityHeaders(middleware.ContentSecurityPolicy(true)))
+	r.GET("/api/v1/ping", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
+	return r
+}
+
+func TestCORS_NeverWildcardWithCredentials(t *testing.T) {
+	prod := middleware.CORSPolicy{AllowedOrigins: []string{"https://web.forfunable.app"}}
+	cases := []struct {
+		name, origin string
+		policy       middleware.CORSPolicy
+		wantACAO     string
+	}{
+		{"origen de la lista blanca", "https://web.forfunable.app", prod, "https://web.forfunable.app"},
+		{"origen malicioso", "https://evil.example", prod, ""},
+		{"sufijo engañoso", "https://web.forfunable.app.evil.example", prod, ""},
+		{"localhost bloqueado en producción", "http://localhost:3000", prod, ""},
+		{"localhost permitido en desarrollo", "http://localhost:3000", middleware.CORSPolicy{AllowLocalhost: true}, "http://localhost:3000"},
+		{"origen null", "null", middleware.CORSPolicy{AllowLocalhost: true}, ""},
+		{"sin Origin (mismo origen, Bruno)", "", prod, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodGet, "/api/v1/ping", nil)
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			w := httptest.NewRecorder()
+			setupCORSTestServer(tc.policy).ServeHTTP(w, req)
+			acao := w.Header().Get("Access-Control-Allow-Origin")
+			if acao == "*" {
+				t.Fatal("Access-Control-Allow-Origin nunca debe ser *")
+			}
+			if acao != tc.wantACAO {
+				t.Fatalf("ACAO = %q, se esperaba %q", acao, tc.wantACAO)
+			}
+			if creds := w.Header().Get("Access-Control-Allow-Credentials"); (creds == "true") != (tc.wantACAO != "") {
+				t.Fatalf("Allow-Credentials = %q con ACAO %q", creds, acao)
+			}
+		})
+	}
+}
+
+func TestCORS_PreflightRejectsUnknownOrigin(t *testing.T) {
+	r := setupCORSTestServer(middleware.CORSPolicy{AllowedOrigins: []string{"https://web.forfunable.app"}})
+	for origin, want := range map[string]int{"https://web.forfunable.app": http.StatusNoContent, "https://evil.example": http.StatusForbidden} {
+		req, _ := http.NewRequest(http.MethodOptions, "/api/v1/ping", nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", "POST")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != want {
+			t.Fatalf("preflight desde %s: estado %d, se esperaba %d", origin, w.Code, want)
+		}
+	}
+}
+
+func TestSecurityHeaders_StrictCSP(t *testing.T) {
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/ping", nil)
+	w := httptest.NewRecorder()
+	setupCORSTestServer(middleware.CORSPolicy{}).ServeHTTP(w, req)
+	csp := w.Header().Get("Content-Security-Policy")
+	var scriptSrc string
+	for _, d := range strings.Split(csp, ";") {
+		if d = strings.TrimSpace(d); strings.HasPrefix(d, "script-src") {
+			scriptSrc = d
+		}
+	}
+	if scriptSrc == "" || strings.Contains(scriptSrc, "unsafe-inline") || strings.Contains(scriptSrc, "unsafe-eval") {
+		t.Fatalf("script-src debe existir y no permitir unsafe-inline/unsafe-eval: %q", scriptSrc)
+	}
+	for _, d := range []string{"default-src 'self'", "object-src 'none'", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'"} {
+		if !strings.Contains(csp, d) {
+			t.Fatalf("falta %q en la CSP: %s", d, csp)
+		}
+	}
+	if !strings.Contains(w.Header().Get("Strict-Transport-Security"), "max-age=31536000") {
+		t.Fatal("falta HSTS")
+	}
+}

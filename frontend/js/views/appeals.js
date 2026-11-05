@@ -24,7 +24,7 @@ window.AppealsView = {
         document.getElementById('appeals-body').innerHTML = UI.empty({ icon: 'construction', title: 'Función no disponible todavía', text: 'El servidor aún no tiene aplicada la migración V003.' });
         return;
       }
-      document.getElementById('appeals-body').innerHTML = UI.error(err, 'AppealsView.render()');
+      document.getElementById('appeals-body').innerHTML = UI.error(err, () => AppealsView.render());
       return;
     }
     this.list = list;
@@ -74,7 +74,7 @@ window.AppealsView = {
               ${a.resolution ? `<p class="mt-2 border-t border-line pt-2 text-body-sm"><span class="text-ink-muted">Respuesta del equipo:</span> ${UI.esc(a.resolution)}</p>` : ''}
             </div>` : ''}
           ${canAppeal && (s.active || s.kind === 'CONTENT_REMOVAL') ? `
-            <div class="mt-4 flex justify-end"><button class="btn-secondary" onclick="AppealsView.appealModal(${UI.arg(s.kind)}, ${UI.arg(s.reference_id)})">${UI.icon('gavel', 'text-[18px]')} Apelar esta decisión</button></div>` : ''}
+            <div class="mt-4 flex justify-end"><button class="btn-secondary" ${UI.on('click', 'AppealsView.appealModal', s.kind, s.reference_id)}>${UI.icon('gavel', 'text-[18px]')} Apelar esta decisión</button></div>` : ''}
         </article>
       </li>`;
   },
@@ -96,15 +96,17 @@ window.AppealsView = {
       </article>`;
   },
 
+  onType(el) { UI.count(el, 'appeal-count', 2000); UI.setHint('appeal-msg', ''); },
+
   appealModal(kind, ref) {
     const s = this.list.find(x => x.reference_id === ref);
     UI.modal({
       title: 'Apelar decisión', icon: 'gavel', tone: 'secondary',
       body: `<p class="mb-3">${this.kinds[kind].label}${s && s.community_name ? ` en c/${UI.esc(s.community_name)}` : ''}: «${UI.esc(s ? s.reason : '')}».</p>
         <div class="mb-1.5 flex justify-between"><label class="label mb-0" for="appeal-msg">Explica por qué crees que debe revisarse</label><span id="appeal-count" class="font-mono text-body-sm text-ink-muted">0 / 2000</span></div>
-        <textarea id="appeal-msg" class="input" rows="5" maxlength="2000" placeholder="Aporta contexto: qué pasó, enlaces o pruebas. Sé concreto y respetuoso." oninput="document.getElementById('appeal-count').textContent = this.value.length + ' / 2000'; UI.setHint('appeal-msg', '')"></textarea>
+        <textarea id="appeal-msg" class="input" rows="5" maxlength="2000" placeholder="Aporta contexto: qué pasó, enlaces o pruebas. Sé concreto y respetuoso." ${UI.on('input', 'AppealsView.onType', UI.EL)}></textarea>
         <div class="field-hint" id="appeal-msg-hint"></div>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-primary" id="appeal-send" onclick="AppealsView.send(${UI.arg(kind)}, ${UI.arg(ref)})">Enviar apelación</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-primary" id="appeal-send" ${UI.on('click', 'AppealsView.send', kind, ref)}>Enviar apelación</button>`
     });
     document.getElementById('appeal-msg').focus();
   },

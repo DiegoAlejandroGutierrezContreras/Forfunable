@@ -100,7 +100,7 @@ window.CreatePostView = {
       <div class="mx-auto max-w-[880px]">
         <div class="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
           <div class="flex items-center gap-3">
-            <button class="btn-icon" onclick="history.length > 1 ? history.back() : Router.navigate('/')" aria-label="Volver">${UI.icon('arrow_back')}</button>
+            <button class="btn-icon" ${UI.on('click', 'UI.back', '/')} aria-label="Volver">${UI.icon('arrow_back')}</button>
             <h1 class="text-headline-lg">${title}</h1>
           </div>
           <span id="draft-status" class="flex items-center gap-2 rounded-full border border-line px-3 py-1 text-body-sm text-ink-secondary empty:hidden"></span>
@@ -112,7 +112,7 @@ window.CreatePostView = {
             <div id="dest-name" class="font-display text-headline-sm">Elige el destino</div>
             <div id="dest-desc" class="truncate text-body-sm text-ink-secondary">La publicación aparecerá en esa comunidad y en el feed.</div>
           </div>
-          <select id="post-community" class="input w-auto min-w-[200px]" onchange="CreatePostView.updateDestination(); CreatePostView.saveDraft()"><option>Cargando…</option></select>
+          <select id="post-community" class="input w-auto min-w-[200px]" ${UI.on('change', 'CreatePostView.onCommunityChange')}><option>Cargando…</option></select>
           <div id="flair-picker" class="hidden w-full border-t border-line pt-3">
             <div class="mb-2 flex items-center gap-2 text-label-sm uppercase tracking-wider text-ink-muted">${UI.icon('sell', 'text-[15px]')} Flair (opcional)</div>
             <div id="flair-options" class="flex flex-wrap gap-2"></div>
@@ -120,7 +120,7 @@ window.CreatePostView = {
         </div>
 
         <div class="mb-4 grid grid-cols-2 gap-1 rounded-lg border border-line bg-surface-card p-1.5 sm:grid-cols-4">
-          ${this.types.map(t => `<button type="button" data-post-type="${t.id}" class="tab justify-center ${t.id === this.type ? 'active' : ''}" onclick="CreatePostView.setType('${t.id}')">${UI.icon(t.icon, 'text-[18px]')}${t.label}</button>`).join('')}
+          ${this.types.map(t => `<button type="button" data-post-type="${t.id}" class="tab justify-center ${t.id === this.type ? 'active' : ''}" ${UI.on('click', 'CreatePostView.setType', t.id)}>${UI.icon(t.icon, 'text-[18px]')}${t.label}</button>`).join('')}
         </div>
 
         <div class="card p-5 sm:p-6">
@@ -128,12 +128,12 @@ window.CreatePostView = {
             <label class="label mb-0" for="post-title">Título de la publicación <span class="text-primary">*</span></label>
             <span id="title-count" class="font-mono text-body-sm text-ink-muted">0 / 300</span>
           </div>
-          <input id="post-title" class="input font-display text-headline-sm" maxlength="300" placeholder="Un título claro y específico" value="${UI.esc(initial.title)}" oninput="CreatePostView.onInput('post-title')">
+          <input id="post-title" class="input font-display text-headline-sm" maxlength="300" placeholder="Un título claro y específico" value="${UI.esc(initial.title)}" ${UI.on('input', 'CreatePostView.onInput', 'post-title')}>
           <div class="field-hint" id="post-title-hint"></div>
 
           <div id="media-block" class="mt-5 hidden">
             <label class="label" for="post-media" id="media-label">Enlace</label>
-            <input id="post-media" class="input" placeholder="https://..." value="${UI.esc(initial.media)}" oninput="CreatePostView.onInput('post-media')">
+            <input id="post-media" class="input" placeholder="https://..." value="${UI.esc(initial.media)}" ${UI.on('input', 'CreatePostView.onInput', 'post-media')}>
             <div class="field-hint" id="post-media-hint"></div>
             <p class="help" id="media-help"></p>
             <div id="media-preview" class="mt-3"></div>
@@ -143,14 +143,14 @@ window.CreatePostView = {
             <div class="flex flex-wrap items-center justify-between gap-2 border-b border-line px-2 py-1.5">
               <div class="flex items-center gap-0.5" id="md-toolbar">
                 ${[['format_bold', '**', '**', 'Negrita'], ['format_italic', '*', '*', 'Cursiva'], ['link', '[', '](https://)', 'Enlace'], ['code', '`', '`', 'Código'], ['code_blocks', '\n```\n', '\n```\n', 'Bloque de código'], ['format_list_bulleted', '\n- ', '', 'Lista'], ['format_quote', '\n> ', '', 'Cita']]
-                  .map(([i, a, b, t]) => `<button type="button" class="btn-icon p-1.5" title="${t}" onclick="CreatePostView.wrap(${UI.arg(a)}, ${UI.arg(b)})">${UI.icon(i, 'text-[19px]')}</button>`).join('')}
+                  .map(([i, a, b, t]) => `<button type="button" class="btn-icon p-1.5" title="${t}" ${UI.on('click', 'CreatePostView.wrap', a, b)}>${UI.icon(i, 'text-[19px]')}</button>`).join('')}
               </div>
               <div class="flex rounded bg-surface-card p-0.5">
-                <button type="button" id="mode-editor" class="tab active py-1" onclick="CreatePostView.setMode('editor')">${UI.icon('edit', 'text-[16px]')} Editor</button>
-                <button type="button" id="mode-preview" class="tab py-1" onclick="CreatePostView.setMode('preview')">${UI.icon('visibility', 'text-[16px]')} Vista previa</button>
+                <button type="button" id="mode-editor" class="tab active py-1" ${UI.on('click', 'CreatePostView.setMode', 'editor')}>${UI.icon('edit', 'text-[16px]')} Editor</button>
+                <button type="button" id="mode-preview" class="tab py-1" ${UI.on('click', 'CreatePostView.setMode', 'preview')}>${UI.icon('visibility', 'text-[16px]')} Vista previa</button>
               </div>
             </div>
-            <textarea id="post-body" class="block min-h-[260px] w-full resize-y bg-transparent p-4 font-mono text-body-md text-ink outline-none placeholder:text-ink-muted" placeholder="Describe el contexto, el problema y lo que propones. Admite Markdown: **negrita**, \`código\`, bloques con \`\`\` y citas con >." oninput="CreatePostView.onInput('post-body')">${UI.esc(initial.body)}</textarea>
+            <textarea id="post-body" class="block min-h-[260px] w-full resize-y bg-transparent p-4 font-mono text-body-md text-ink outline-none placeholder:text-ink-muted" placeholder="Describe el contexto, el problema y lo que propones. Admite Markdown: **negrita**, \`código\`, bloques con \`\`\` y citas con >." ${UI.on('input', 'CreatePostView.onInput', 'post-body')}>${UI.esc(initial.body)}</textarea>
             <div id="post-preview" class="hidden min-h-[260px] p-4"></div>
           </div>
           <div class="field-hint" id="post-body-hint"></div>
@@ -158,9 +158,9 @@ window.CreatePostView = {
           <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
             <p class="flex items-center gap-1.5 text-body-sm text-ink-muted">${UI.icon('gavel', 'text-[16px]')} Respeta las normas de la comunidad de destino.</p>
             <div class="flex gap-2">
-              ${editing ? `<button class="btn-danger-ghost" onclick="PostDetailView.deletePost(${UI.arg(this.editing.id)})">${UI.icon('delete', 'text-[18px]')} Eliminar</button>` : ''}
-              <button class="btn-ghost" onclick="CreatePostView.cancel()">${editing ? 'Cancelar' : 'Descartar'}</button>
-              <button class="btn-primary px-5" id="btn-publish" onclick="CreatePostView.submit()">${UI.icon(editing ? 'save' : 'send', 'text-[18px]')} ${editing ? 'Guardar cambios' : 'Publicar'}</button>
+              ${editing ? `<button class="btn-danger-ghost" ${UI.on('click', 'PostDetailView.deletePost', this.editing.id)}>${UI.icon('delete', 'text-[18px]')} Eliminar</button>` : ''}
+              <button class="btn-ghost" ${UI.on('click', 'CreatePostView.cancel')}>${editing ? 'Cancelar' : 'Descartar'}</button>
+              <button class="btn-primary px-5" id="btn-publish" ${UI.on('click', 'CreatePostView.submit')}>${UI.icon(editing ? 'save' : 'send', 'text-[18px]')} ${editing ? 'Guardar cambios' : 'Publicar'}</button>
             </div>
           </div>
         </div>
@@ -169,6 +169,8 @@ window.CreatePostView = {
     this.onInput('post-title', true);
     if (initial.media) this.onInput('post-media', true);
   },
+
+  onCommunityChange() { this.updateDestination(); this.saveDraft(); },
 
   updateDestination() {
     const id = document.getElementById('post-community').value;
@@ -197,8 +199,8 @@ window.CreatePostView = {
   paintFlairs() {
     const opts = document.getElementById('flair-options');
     if (!opts) return;
-    opts.innerHTML = `<button type="button" class="chip-neutral cursor-pointer py-1 ${!this.flairId ? 'ring-1 ring-primary' : ''}" onclick="CreatePostView.pickFlair('')">Sin flair</button>` +
-      (this.flairs || []).map(f => `<button type="button" class="cursor-pointer rounded-chip ${this.flairId === f.id ? 'ring-1 ring-primary' : 'opacity-75 hover:opacity-100'}" aria-pressed="${this.flairId === f.id}" onclick="CreatePostView.pickFlair(${UI.arg(f.id)})">${UI.flairChip(f)}</button>`).join('');
+    opts.innerHTML = `<button type="button" class="chip-neutral cursor-pointer py-1 ${!this.flairId ? 'ring-1 ring-primary' : ''}" ${UI.on('click', 'CreatePostView.pickFlair', '')}>Sin flair</button>` +
+      (this.flairs || []).map(f => `<button type="button" class="cursor-pointer rounded-chip ${this.flairId === f.id ? 'ring-1 ring-primary' : 'opacity-75 hover:opacity-100'}" aria-pressed="${this.flairId === f.id}" ${UI.on('click', 'CreatePostView.pickFlair', f.id)}>${UI.flairChip(f)}</button>`).join('');
   },
 
   pickFlair(id) { this.flairId = id; this.paintFlairs(); },

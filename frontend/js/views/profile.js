@@ -59,7 +59,7 @@ window.ProfileView = {
           </div>
           <div class="flex gap-2">
             ${isMe ? `<a href="/settings/profile" data-link class="btn-primary">${UI.icon('edit', 'text-[18px]')} Editar perfil</a>` : me ? `<a href="/chat/new?to=${encodeURIComponent(user.username)}" data-link class="btn-primary">${UI.icon('chat', 'text-[18px]')} Mensaje</a>` : ''}
-            <button class="btn-secondary" onclick="UI.share(${UI.arg('/u/' + encodeURIComponent(user.username))})">${UI.icon('share', 'text-[18px]')} Compartir</button>
+            <button class="btn-secondary" ${UI.on('click', 'UI.share', '/u/' + encodeURIComponent(user.username))}>${UI.icon('share', 'text-[18px]')} Compartir</button>
             ${isMe ? `<a href="/settings" data-link class="btn-secondary px-2.5" title="Ajustes">${UI.icon('tune')}</a>` : ''}
           </div>
         </div>
@@ -93,7 +93,7 @@ window.ProfileView = {
         <p class="mt-4 flex items-start gap-2 rounded bg-surface-elevated px-4 py-3 text-body-sm text-ink-secondary">${UI.icon('info', 'text-[17px] text-secondary')} El karma total combina el saldo inicial de la cuenta, los votos recibidos y los ajustes de la administración; el desglose muestra solo los votos.</p>
       </section>
 
-      <div class="mt-4">${UI.tabs([{ id: 'posts', label: 'Publicaciones', icon: 'article' }], 'posts', 'void')}</div>
+      <div class="mt-4">${UI.tabs([{ id: 'posts', label: 'Publicaciones', icon: 'article' }], 'posts', null)}</div>
       <div id="profile-posts" class="mt-4 flex flex-col gap-4">${UI.skeletonPosts(2)}</div>`;
 
     Router.setRail(this.ranksCard(total) + (isMe ? `

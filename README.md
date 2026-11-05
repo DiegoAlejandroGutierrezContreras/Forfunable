@@ -97,6 +97,18 @@ La interfaz está en `frontend/` (SPA en JavaScript sin framework, servida por e
 cd frontend && npm install && npm run build:css
 ```
 
+### Seguridad del frontend
+
+| Control | Dónde |
+| :--- | :--- |
+| **CSP estricta** (sin `unsafe-inline` ni `unsafe-eval` en scripts) | `middleware/security.go` → `ContentSecurityPolicy`. El SPA no usa manejadores en línea: los eventos se declaran con `UI.on('click', 'Vista.metodo', args)` (atributos `data-on-*`) y se resuelven por delegación en `frontend/js/ui.js`, sin `eval`. |
+| **CORS** con lista blanca (nunca `*` con credenciales) | `CORSMiddleware`. El SPA es del mismo origen y no lo necesita; otros orígenes se declaran en `ALLOWED_ORIGINS` (separados por comas). Fuera de producción se admite `localhost`. |
+| **Validación declarativa** con Zod antes de cada `fetch` | `frontend/js/schemas.js` (Zod empaquetado en `frontend/js/vendor/zod.min.js`) y `web/lib/schemas.ts`. |
+| **reCAPTCHA Enterprise** en login, registro y creación de comunidades | El SPA lee `GET /api/v1/config/public` y carga `enterprise.js` solo si el backend lo exige. |
+| **Cabeceras**: HSTS, `X-Frame-Options`, `Permissions-Policy`, `Referrer-Policy`, COOP | `SecurityHeaders` (Go) y `web/middleware.ts` (Next.js). |
+
+Para activar reCAPTCHA Enterprise en Cloud Run: crea una clave de sitio web (basada en puntuación) con el dominio del servicio y define `RECAPTCHA_BYPASS=false`, `RECAPTCHA_PROJECT_ID`, `RECAPTCHA_SITE_KEY` y `RECAPTCHA_API_KEY` (esta última desde Secret Manager).
+
 ## Ejecución Local con PostgreSQL
 
 La aplicación requiere PostgreSQL activo (localmente o en Cloud SQL):

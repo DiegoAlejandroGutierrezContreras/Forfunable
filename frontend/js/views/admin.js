@@ -33,7 +33,7 @@ window.AdminView = {
     try {
       await this[tab]();
     } catch (err) {
-      document.getElementById('admin-content').innerHTML = UI.error(err, `AdminView.render('${tab}')`);
+      document.getElementById('admin-content').innerHTML = UI.error(err, () => AdminView.render(tab));
     }
   },
 
@@ -125,8 +125,8 @@ window.AdminView = {
             <p class="mt-1 text-body-sm text-ink-muted">Denunciado por @${UI.esc(r.reporter_username || 'usuario')} · ${window.utils.formatTime(r.created_at)}${r.target_post_id ? ` · <a href="/posts/${encodeURIComponent(r.target_post_id)}" data-link class="text-secondary hover:underline">Ver contenido</a>` : ''}</p>
           </div>
           <div class="flex gap-2">
-            <button class="btn-secondary btn-sm" onclick="AdminView.resolve(${UI.arg(r.id)}, 'DISMISS')">Descartar</button>
-            <button class="btn-danger btn-sm" onclick="AdminView.resolve(${UI.arg(r.id)}, 'RESOLVE_DELETE')">${UI.icon('gavel', 'text-[16px]')} Sancionar / Borrar</button>
+            <button class="btn-secondary btn-sm" ${UI.on('click', 'AdminView.resolve', r.id, 'DISMISS')}>Descartar</button>
+            <button class="btn-danger btn-sm" ${UI.on('click', 'AdminView.resolve', r.id, 'RESOLVE_DELETE')}>${UI.icon('gavel', 'text-[16px]')} Sancionar / Borrar</button>
           </div>
         </div>`).join('')}</div>` : UI.empty({ icon: 'task_alt', title: 'No hay reportes pendientes', text: 'La comunidad está tranquila. Las denuncias nuevas aparecerán aquí.' })}`;
   },
@@ -195,8 +195,8 @@ window.AdminView = {
               <textarea id="res-${UI.esc(a.id)}" class="input" rows="2" placeholder="Explica la decisión con al menos 5 caracteres"></textarea>
               <div class="field-hint" id="res-${UI.esc(a.id)}-hint"></div>
               <div class="mt-3 flex flex-wrap justify-end gap-2">
-                <button class="btn-danger-ghost" onclick="AdminView.decideAppeal(${UI.arg(a.id)}, 'REJECT')">${UI.icon('close', 'text-[18px]')} Mantener sanción</button>
-                <button class="btn-primary" onclick="AdminView.decideAppeal(${UI.arg(a.id)}, 'ACCEPT')">${UI.icon('check', 'text-[18px]')} Aceptar y revertir</button>
+                <button class="btn-danger-ghost" ${UI.on('click', 'AdminView.decideAppeal', a.id, 'REJECT')}>${UI.icon('close', 'text-[18px]')} Mantener sanción</button>
+                <button class="btn-primary" ${UI.on('click', 'AdminView.decideAppeal', a.id, 'ACCEPT')}>${UI.icon('check', 'text-[18px]')} Aceptar y revertir</button>
               </div>
             </div>` : `
             <div class="mt-3 rounded border border-line bg-surface-base p-3 text-body-sm"><span class="text-ink-muted">Resolución ${a.resolved_at ? window.utils.formatTime(a.resolved_at) : ''}:</span> ${UI.esc(a.resolution)}</div>`}
@@ -227,8 +227,8 @@ window.AdminView = {
     this.box().innerHTML = `
       <div class="mb-3 flex flex-wrap items-center gap-2">
         ${UI.tabs([{ id: 'all', label: 'Todo' }, { id: 'moderation', label: 'Moderación', icon: 'shield' }, { id: 'admin', label: 'Administrativa', icon: 'admin_panel_settings' }], this.auditFilter, 'AdminView.setAuditFilter')}
-        <input id="audit-search" class="input w-auto flex-1 py-1.5 text-body-sm" placeholder="Filtrar por actor, acción o detalle…" oninput="AdminView.paintAudit()">
-        <button class="btn-secondary btn-sm" onclick="AdminView.exportAudit()">${UI.icon('download', 'text-[17px]')} CSV</button>
+        <input id="audit-search" class="input w-auto flex-1 py-1.5 text-body-sm" placeholder="Filtrar por actor, acción o detalle…" ${UI.on('input', 'AdminView.paintAudit')}>
+        <button class="btn-secondary btn-sm" ${UI.on('click', 'AdminView.exportAudit')}>${UI.icon('download', 'text-[17px]')} CSV</button>
       </div>
       <div id="audit-table"></div>
       <p class="mt-3 flex items-center gap-1.5 text-body-sm text-ink-muted">${UI.icon('lock', 'text-[15px]')} Registro de solo inserción: las entradas no se pueden editar ni borrar desde la aplicación.</p>`;
@@ -279,10 +279,18 @@ window.AdminView = {
       <div class="mb-3 grid gap-2 sm:grid-cols-3">
         ${[['USER', 'Usuario', 'Publica, comenta y vota'], ['COMMUNITY_MOD', 'Moderador', 'Cola de reportes, sanciones y ajustes de comunidad'], ['GLOBAL_ADMIN', 'Administrador global', 'Todo lo anterior, roles y suspensiones']].map(([k, l, d]) => `<div class="rounded border border-line bg-surface-card p-3"><div class="flex items-center gap-2 text-label-lg">${UI.roleBadge(k) || '<span class="chip-neutral">Usuario</span>'}${l}</div><div class="mt-1 text-body-sm text-ink-muted">${d}</div></div>`).join('')}
       </div>
-      <input id="users-search" class="input mb-3" placeholder="Buscar por usuario o correo…" oninput="clearTimeout(AdminView._t); AdminView._t = setTimeout(() => AdminView.loadUsers(), 250)">
+      <input id="users-search" class="input mb-3" placeholder="Buscar por usuario o correo…" ${UI.on('input', 'AdminView.searchUsers')}>
       <div id="users-table">${UI.skeletonPosts(1)}</div>`;
     await this.loadUsers();
   },
+
+  searchUsers() {
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.loadUsers(), 250);
+  },
+
+  previewThreshold(el) { document.getElementById('thr-val').textContent = Math.round(el.value * 100) + '%'; },
+  setThreshold(el) { this.threshold = Number(el.value); this.sybil(); },
 
   async loadUsers() {
     const search = document.getElementById('users-search').value.trim();
@@ -297,13 +305,13 @@ window.AdminView = {
             <td><a href="/u/${encodeURIComponent(u.username)}" data-link class="flex items-center gap-2 hover:text-secondary">${UI.avatar(u, 30)}<span><span class="block text-label-lg">@${UI.esc(u.username)}</span><span class="block text-body-sm text-ink-muted">${UI.esc(u.email)}</span></span></a></td>
             <td class="font-mono text-primary">${u.karma_score}</td>
             <td>${u.id === me.id ? `<span class="chip-danger">${u.global_role}</span>` : `
-              <select class="input w-auto py-1 text-body-sm" onchange="AdminView.changeRole(${UI.arg(u.id)}, ${UI.arg(u.username)}, this)" data-prev="${u.global_role}">
+              <select class="input w-auto py-1 text-body-sm" ${UI.on('change', 'AdminView.changeRole', u.id, u.username, UI.EL)} data-prev="${u.global_role}">
                 ${['USER', 'COMMUNITY_MOD', 'GLOBAL_ADMIN'].map(r => `<option value="${r}" ${u.global_role === r ? 'selected' : ''}>${r}</option>`).join('')}
               </select>`}</td>
             <td>${u.is_active ? '<span class="chip-primary">Activa</span>' : '<span class="chip-danger">Suspendida</span>'}</td>
             <td class="text-right">${u.id === me.id ? '' : u.is_active
-              ? `<button class="btn-danger-ghost btn-sm" onclick="AdminView.suspend(${UI.arg(u.id)}, ${UI.arg(u.username)})">${UI.icon('person_off', 'text-[16px]')} Suspender</button>`
-              : `<button class="btn-secondary btn-sm" onclick="AdminView.reactivate(${UI.arg(u.id)}, ${UI.arg(u.username)})">${UI.icon('how_to_reg', 'text-[16px]')} Reactivar</button>`}</td>
+              ? `<button class="btn-danger-ghost btn-sm" ${UI.on('click', 'AdminView.suspend', u.id, u.username)}>${UI.icon('person_off', 'text-[16px]')} Suspender</button>`
+              : `<button class="btn-secondary btn-sm" ${UI.on('click', 'AdminView.reactivate', u.id, u.username)}>${UI.icon('how_to_reg', 'text-[16px]')} Reactivar</button>`}</td>
           </tr>`).join('')}</tbody></table></div>` : UI.empty({ icon: 'person_search', title: 'Sin coincidencias' });
   },
 
@@ -326,7 +334,7 @@ window.AdminView = {
       title: `Suspender a @${username}`, icon: 'person_off', tone: 'danger',
       body: `<p>No podrá iniciar sesión hasta que se reactive la cuenta. El motivo se le mostrará al intentar entrar.</p>
         <div class="mt-4 text-left">${UI.field('suspend-reason', 'Motivo', { textarea: true, rows: 3, placeholder: 'Ej: Spam coordinado desde varias cuentas' })}</div>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-danger" onclick="AdminView.confirmSuspend(this, ${UI.arg(id)}, ${UI.arg(username)})">Suspender cuenta</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-danger" ${UI.on('click', 'AdminView.confirmSuspend', UI.EL, id, username)}>Suspender cuenta</button>`
     });
   },
 
@@ -365,7 +373,7 @@ window.AdminView = {
     this.box().innerHTML = `
       <div class="card mb-4 flex flex-wrap items-center gap-4">
         <div class="flex-1"><h2 class="text-headline-sm">Umbral de riesgo</h2><p class="text-body-sm text-ink-secondary">Puntuación calculada a partir de la antigüedad de la cuenta, el karma y la actividad reciente.</p></div>
-        <input type="range" min="0.1" max="0.95" step="0.05" value="${this.threshold}" class="w-48 accent-[#00e676]" oninput="document.getElementById('thr-val').textContent = Math.round(this.value * 100) + '%'" onchange="AdminView.threshold = Number(this.value); AdminView.sybil()">
+        <input type="range" min="0.1" max="0.95" step="0.05" value="${this.threshold}" class="w-48 accent-[#00e676]" ${UI.on('input', 'AdminView.previewThreshold', UI.EL)} ${UI.on('change', 'AdminView.setThreshold', UI.EL)}>
         <span id="thr-val" class="chip-warning font-mono">${Math.round(this.threshold * 100)}%</span>
       </div>
       ${groups.length ? `<div class="card overflow-x-auto p-0"><table class="table">
@@ -378,7 +386,7 @@ window.AdminView = {
             <td><div class="flex items-center gap-2"><div class="h-2 w-24 overflow-hidden rounded-full bg-surface-base"><div class="h-full ${cls}" style="width:${pct}%"></div></div><span class="font-mono">${pct}%</span></div></td>
             <td class="font-mono">${g.post_count}</td>
             <td class="font-mono text-ink-muted">${g.days_old} días</td>
-            <td class="text-right"><button class="btn-danger-ghost btn-sm" onclick="AdminView.suspend(${UI.arg(g.user_id)}, ${UI.arg(g.username)})">${UI.icon('person_off', 'text-[16px]')} Suspender</button></td>
+            <td class="text-right"><button class="btn-danger-ghost btn-sm" ${UI.on('click', 'AdminView.suspend', g.user_id, g.username)}>${UI.icon('person_off', 'text-[16px]')} Suspender</button></td>
           </tr>`;
         }).join('')}</tbody></table></div>` : UI.empty({ icon: 'verified_user', title: 'Sin cuentas por encima del umbral', text: 'Baja el umbral para revisar cuentas con menor riesgo.' })}`;
   },
@@ -398,7 +406,7 @@ window.AdminView = {
           <h2 class="text-headline-md">Reindexar</h2>
           <label class="label mt-3" for="reindex-scope">Alcance</label>
           <select id="reindex-scope" class="input"><option value="">Toda la plataforma</option>${comms.map(c => `<option value="${UI.esc(c.id)}">c/${UI.esc(c.name)}</option>`).join('')}</select>
-          <button class="btn-primary mt-4 w-full" id="btn-reindex" onclick="AdminView.reindex()">${UI.icon('model_training', 'text-[18px]')} Recalcular contadores</button>
+          <button class="btn-primary mt-4 w-full" id="btn-reindex" ${UI.on('click', 'AdminView.reindex')}>${UI.icon('model_training', 'text-[18px]')} Recalcular contadores</button>
           <div id="reindex-result" class="mt-4"></div>
         </div>
       </div>`;

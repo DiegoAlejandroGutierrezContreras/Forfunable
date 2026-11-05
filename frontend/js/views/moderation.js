@@ -29,13 +29,13 @@ window.ModerationView = {
         <p>Tu denuncia llega a la cola de moderación. Quien publicó no sabrá quién lo reportó.</p>
         <div class="mt-4 grid gap-2 text-left sm:grid-cols-2" id="report-reasons">
           ${this.reasons.map(r => `
-            <button type="button" data-reason="${r.code}" class="flex items-start gap-2 rounded border border-line bg-surface-base p-3 text-left transition-colors hover:border-line-strong" onclick="ModerationView.pickReason('${r.code}')">
+            <button type="button" data-reason="${r.code}" class="flex items-start gap-2 rounded border border-line bg-surface-base p-3 text-left transition-colors hover:border-line-strong" ${UI.on('click', 'ModerationView.pickReason', r.code)}>
               ${UI.icon(r.icon, 'text-[18px] text-ink-secondary')}<span><span class="block text-label-lg text-ink">${r.label}</span><span class="block text-body-sm text-ink-muted">${r.desc}</span></span>
             </button>`).join('')}
         </div>
         <div class="field-hint" id="report-reason-hint"></div>
         <div class="mt-4 text-left">${UI.field('report-desc', 'Detalle para los moderadores (opcional)', { textarea: true, rows: 3, placeholder: 'Ej: la clave de API aparece en la línea 12 del bloque de código' })}</div>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-danger" onclick="ModerationView.submitReport(this)">${UI.icon('send', 'text-[18px]')} Enviar denuncia</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-danger" ${UI.on('click', 'ModerationView.submitReport', UI.EL)}>${UI.icon('send', 'text-[18px]')} Enviar denuncia</button>`
     });
   },
 
@@ -162,8 +162,8 @@ window.ModerationView = {
             <span class="ml-auto flex items-center gap-1">
               ${mine ? '<span class="text-ink-muted">Tu nota</span>' : `
               <span class="text-ink-muted">¿Fue útil?</span>
-              <button class="btn-ghost btn-sm ${n.user_vote === 1 ? 'text-primary' : ''}" onclick="ModerationView.voteNote(${UI.arg(n.id)}, true)">${UI.icon('thumb_up', 'text-[16px]')} ${n.helpful_votes}</button>
-              <button class="btn-ghost btn-sm ${n.user_vote === -1 ? 'text-danger' : ''}" onclick="ModerationView.voteNote(${UI.arg(n.id)}, false)">${UI.icon('thumb_down', 'text-[16px]')} ${n.unhelpful_votes}</button>`}
+              <button class="btn-ghost btn-sm ${n.user_vote === 1 ? 'text-primary' : ''}" ${UI.on('click', 'ModerationView.voteNote', n.id, true)}>${UI.icon('thumb_up', 'text-[16px]')} ${n.helpful_votes}</button>
+              <button class="btn-ghost btn-sm ${n.user_vote === -1 ? 'text-danger' : ''}" ${UI.on('click', 'ModerationView.voteNote', n.id, false)}>${UI.icon('thumb_down', 'text-[16px]')} ${n.unhelpful_votes}</button>`}
             </span>
           </div>
         </div>`;
@@ -197,14 +197,14 @@ window.ModerationView = {
         </ul>
         <div class="mt-4 text-left">
           <div class="mb-1.5 flex justify-between"><label class="label mb-0" for="note-text">Contexto adicional</label><span id="note-count" class="font-mono text-body-sm text-ink-muted">0 / 1000</span></div>
-          <textarea id="note-text" class="input" rows="4" maxlength="1000" placeholder="Ej: El benchmark se ejecutó con Linux 6.8 y BPF activo; con kernels anteriores la mejora es menor." oninput="document.getElementById('note-count').textContent = this.value.length + ' / 1000'"></textarea>
+          <textarea id="note-text" class="input" rows="4" maxlength="1000" placeholder="Ej: El benchmark se ejecutó con Linux 6.8 y BPF activo; con kernels anteriores la mejora es menor." ${UI.on('input', 'UI.count', UI.EL, 'note-count', 1000)}></textarea>
           <div class="field-hint" id="note-text-hint"></div>
           <div class="mt-3">${UI.field('note-proof', 'Fuente (enlace)', { type: 'url', placeholder: 'https://…' })}</div>
         </div>` : `
         <p>Para proponer notas necesitas al menos <strong class="text-ink">${this.NOTE_MIN_KARMA} de karma</strong>. Tienes ${me.karma_score}.</p>
         <p class="mt-2">Sigue aportando publicaciones y comentarios útiles: cuando otros los voten, ganarás reputación.</p>`,
-      actions: allowed ? `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-primary" onclick="ModerationView.submitNote(this, ${UI.arg(postId)})">${UI.icon('send', 'text-[18px]')} Proponer nota</button>`
-        : `<button class="btn-primary" onclick="UI.closeModal()">Entendido</button>`
+      actions: allowed ? `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-primary" ${UI.on('click', 'ModerationView.submitNote', UI.EL, postId)}>${UI.icon('send', 'text-[18px]')} Proponer nota</button>`
+        : `<button class="btn-primary" ${UI.on('click', 'UI.closeModal')}>Entendido</button>`
     });
   },
 
@@ -236,7 +236,7 @@ window.ModerationView = {
           <select id="remove-rule" class="input mb-3">${this.reasons.map(r => `<option value="${UI.esc(r.label)}">${r.label}</option>`).join('')}</select>
           ${UI.field('remove-reason', 'Justificación (visible para el autor)', { textarea: true, rows: 3, placeholder: 'Explica qué parte incumple la norma' })}
         </div>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-danger" onclick="ModerationView.confirmRemove(this, ${UI.arg(targetId)})">${UI.icon('gavel', 'text-[18px]')} Retirar contenido</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-danger" ${UI.on('click', 'ModerationView.confirmRemove', UI.EL, targetId)}>${UI.icon('gavel', 'text-[18px]')} Retirar contenido</button>`
     });
   },
 

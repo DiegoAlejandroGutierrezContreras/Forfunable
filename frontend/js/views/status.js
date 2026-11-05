@@ -68,7 +68,7 @@ window.StatusView = {
 
   banners: {
     offline: { cls: 'bg-warning text-primary-ink', icon: 'wifi_off', text: 'Sin conexión a internet. Lo que ves puede estar desactualizado.' },
-    slow: { cls: 'bg-surface-elevated text-ink border-b border-line', icon: 'network_check', text: 'Tu conexión es lenta. ¿Activar el modo ligero (sin imágenes)?', action: `<button class="btn-primary btn-sm" onclick="StatusView.setLite(true)">Activar</button><button class="btn-ghost btn-sm" onclick="StatusView.clearBanner('slow')">Ahora no</button>` },
+    slow: { cls: 'bg-surface-elevated text-ink border-b border-line', icon: 'network_check', text: 'Tu conexión es lenta. ¿Activar el modo ligero (sin imágenes)?', action: `<button class="btn-primary btn-sm" ${UI.on('click', 'StatusView.setLite', true)}>Activar</button><button class="btn-ghost btn-sm" ${UI.on('click', 'StatusView.clearBanner', 'slow')}>Ahora no</button>` },
     readonly: { cls: 'bg-warning/90 text-primary-ink', icon: 'edit_off', text: 'Modo solo lectura: la base de datos no responde. Publicar y votar puede fallar hasta que se restablezca.', action: `<a href="/status" data-link class="btn btn-sm bg-primary-ink/20 text-primary-ink">Ver estado</a>` },
     retry: { cls: 'bg-surface-elevated text-ink border-b border-line', icon: 'sync', text: '' }
   },
@@ -95,6 +95,11 @@ window.StatusView = {
   retrying(attempt, delayMs) {
     this.banner('retry', `Reconectando con el servidor… intento ${attempt} (siguiente en ${Math.round(delayMs / 1000)} s)`);
   },
+  toggleLite(el) { this.setLite(!this.isLite()); el.classList.toggle('on', this.isLite()); },
+
+  runRetry() { return this._retry ? this._retry() : Router.handleRoute(); },
+  leave() { UI.closeModal(); Router.navigate('/'); },
+
   retryDone() { this.clearBanner('retry'); },
 
   // Página de estado/error genérica a pantalla de contenido
@@ -114,11 +119,11 @@ window.StatusView = {
         <h1 class="mt-4 text-headline-xl text-balance">${opts.title || p.title}</h1>
         <p class="mt-3 max-w-lg text-body-lg text-ink-secondary">${opts.text || p.text}</p>
         ${extra.body || ''}
-        <div class="mt-8 flex flex-wrap justify-center gap-3">${extra.actions || `<a href="/" data-link class="btn-primary px-5">${UI.icon('arrow_back', 'text-[18px]')} Volver al feed</a><button class="btn-secondary px-5" onclick="history.back()">Página anterior</button>`}</div>
+        <div class="mt-8 flex flex-wrap justify-center gap-3">${extra.actions || `<a href="/" data-link class="btn-primary px-5">${UI.icon('arrow_back', 'text-[18px]')} Volver al feed</a><button class="btn-secondary px-5" ${UI.on('click', 'UI.back')}>Página anterior</button>`}</div>
         ${extra.footer || ''}
       </div>`;
     if (opts.replaceMain === false) {
-      UI.modal({ title: p.title, body: `<p>${opts.text || p.text}</p>${extra.body || ''}`, icon: p.icon, tone: p.tone, actions: `<button class="btn-primary" onclick="UI.closeModal()">Entendido</button>` });
+      UI.modal({ title: p.title, body: `<p>${opts.text || p.text}</p>${extra.body || ''}`, icon: p.icon, tone: p.tone, actions: `<button class="btn-primary" ${UI.on('click', 'UI.closeModal')}>Entendido</button>` });
       return;
     }
     const main = document.getElementById('main-view-container');
@@ -137,7 +142,7 @@ window.StatusView = {
             <div><div class="text-label-sm uppercase tracking-wider text-ink-muted">Nivel requerido</div><div class="mt-1 text-headline-sm">${opts.required || 'Moderador o administrador'}</div></div>
             <div class="sm:text-right"><div class="text-label-sm uppercase tracking-wider text-ink-muted">Tu rol actual</div><div class="mt-1 text-headline-sm text-ink-secondary">${roleName(user && user.global_role)}</div></div>
           </div>`,
-        actions: `<a href="/" data-link class="btn-primary px-5">${UI.icon('arrow_back', 'text-[18px]')} Volver a una sección permitida</a>${user ? `<button class="btn-secondary px-5" onclick="Router.logout()">${UI.icon('swap_horiz', 'text-[18px]')} Cambiar de cuenta</button>` : ''}`,
+        actions: `<a href="/" data-link class="btn-primary px-5">${UI.icon('arrow_back', 'text-[18px]')} Volver a una sección permitida</a>${user ? `<button class="btn-secondary px-5" ${UI.on('click', 'Router.logout')}>${UI.icon('swap_horiz', 'text-[18px]')} Cambiar de cuenta</button>` : ''}`,
         footer: '<p class="mt-8 text-body-sm text-ink-muted">Si crees que es un error, contacta a un administrador del sistema.</p>'
       };
       case 'route': case '404': return {
@@ -150,16 +155,16 @@ window.StatusView = {
       };
       case '502': return {
         body: `<div class="card mt-8 w-full text-left"><div class="mb-3 flex items-center justify-between"><span class="text-headline-sm">Diagnóstico</span><span class="chip-neutral font-mono" id="diag-time"></span></div><ul id="diag-list" class="flex flex-col gap-2 text-body-sm"></ul></div>`,
-        actions: `<button class="btn-primary px-5" onclick="Router.handleRoute()">${UI.icon('refresh', 'text-[18px]')} Reintentar ahora</button><a href="/status" data-link class="btn-secondary px-5">Estado del servicio</a>`
+        actions: `<button class="btn-primary px-5" ${UI.on('click', 'Router.handleRoute')}>${UI.icon('refresh', 'text-[18px]')} Reintentar ahora</button><a href="/status" data-link class="btn-secondary px-5">Estado del servicio</a>`
       };
-      case 'offline': return { actions: `<button class="btn-primary px-5" onclick="Router.handleRoute()">${UI.icon('refresh', 'text-[18px]')} Reintentar</button>` };
+      case 'offline': return { actions: `<button class="btn-primary px-5" ${UI.on('click', 'Router.handleRoute')}>${UI.icon('refresh', 'text-[18px]')} Reintentar</button>` };
       case '500': case 'maintenance': return {
         body: opts.detail ? `<code class="mt-6 max-w-full truncate rounded border border-line bg-surface-card px-3 py-1.5 font-mono text-body-sm text-ink-muted">${UI.esc(opts.detail)}</code>` : '',
-        actions: `<button class="btn-primary px-5" onclick="${opts.retry ? 'StatusView._retry()' : 'Router.handleRoute()'}">${UI.icon('refresh', 'text-[18px]')} Reintentar</button><a href="/status" data-link class="btn-secondary px-5">Estado del servicio</a>`
+        actions: `<button class="btn-primary px-5" ${UI.on('click', opts.retry ? 'StatusView.runRetry' : 'Router.handleRoute')}>${UI.icon('refresh', 'text-[18px]')} Reintentar</button><a href="/status" data-link class="btn-secondary px-5">Estado del servicio</a>`
       };
       case '409': return {
         body: opts.detail ? `<div class="card mt-6 w-full text-left text-body-md"><span class="text-warning">${UI.icon('info', 'align-middle text-[18px]')}</span> ${UI.esc(opts.detail)}</div>` : '',
-        actions: `<button class="btn-primary px-5" onclick="Router.handleRoute()">${UI.icon('refresh', 'text-[18px]')} Recargar los datos actuales</button><button class="btn-secondary px-5" onclick="history.back()">Volver</button>`
+        actions: `<button class="btn-primary px-5" ${UI.on('click', 'Router.handleRoute')}>${UI.icon('refresh', 'text-[18px]')} Recargar los datos actuales</button><button class="btn-secondary px-5" ${UI.on('click', 'UI.back')}>Volver</button>`
       };
       case '429': case 'lockout': case 'post-limit': return {
         body: `<div class="card mt-8 flex w-full items-center justify-between text-left"><span class="text-body-md text-ink-secondary">Podrás continuar en</span><span id="status-countdown" class="font-mono text-headline-lg text-warning">--:--</span></div>`,
@@ -170,7 +175,7 @@ window.StatusView = {
         actions: `<a href="/" data-link class="btn-secondary px-5">Explorar como visitante</a>`
       };
       case 'community-restricted': return {
-        actions: `${opts.community ? `<button class="btn-primary px-5" onclick="CommunityView.toggleJoin(${UI.arg(opts.community.id)}, ${UI.arg(opts.community.name)}, false)">${UI.icon('group_add', 'text-[18px]')} Unirme a c/${UI.esc(opts.community.name)}</button>` : ''}<a href="/communities" data-link class="btn-secondary px-5">Explorar otras comunidades</a>`
+        actions: `${opts.community ? `<button class="btn-primary px-5" ${UI.on('click', 'CommunityView.toggleJoin', opts.community.id, opts.community.name, false)}>${UI.icon('group_add', 'text-[18px]')} Unirme a c/${UI.esc(opts.community.name)}</button>` : ''}<a href="/communities" data-link class="btn-secondary px-5">Explorar otras comunidades</a>`
       };
       case 'session-invalid': return { actions: `<a href="/login" data-link class="btn-primary px-5">Iniciar sesión</a>` };
       default: return {};
@@ -216,7 +221,7 @@ window.StatusView = {
   // 06_58 Estado del servicio e infraestructura
   async service() {
     const main = document.getElementById('main-view-container');
-    main.innerHTML = UI.pageHeader('Estado del servicio', 'Comprobaciones en vivo de la API, la base de datos y los servicios principales.', `<button class="btn-secondary" onclick="StatusView.service()">${UI.icon('refresh', 'text-[18px]')} Actualizar</button>`, 'monitor_heart') + UI.skeletonPosts(2);
+    main.innerHTML = UI.pageHeader('Estado del servicio', 'Comprobaciones en vivo de la API, la base de datos y los servicios principales.', `<button class="btn-secondary" ${UI.on('click', 'StatusView.service')}>${UI.icon('refresh', 'text-[18px]')} Actualizar</button>`, 'monitor_heart') + UI.skeletonPosts(2);
     const checks = [
       ['API y servidor web', '/health', 'dns'],
       ['Feed de publicaciones', '/api/v1/posts?limit=1', 'dynamic_feed'],
@@ -236,7 +241,7 @@ window.StatusView = {
     const health = results[0].body || {};
     const dbOk = health.database === 'CONNECTED';
     const all = results.every(r => r.ok) && dbOk;
-    main.innerHTML = UI.pageHeader('Estado del servicio', 'Comprobaciones en vivo de la API, la base de datos y los servicios principales.', `<button class="btn-secondary" onclick="StatusView.service()">${UI.icon('refresh', 'text-[18px]')} Actualizar</button>`, 'monitor_heart') + `
+    main.innerHTML = UI.pageHeader('Estado del servicio', 'Comprobaciones en vivo de la API, la base de datos y los servicios principales.', `<button class="btn-secondary" ${UI.on('click', 'StatusView.service')}>${UI.icon('refresh', 'text-[18px]')} Actualizar</button>`, 'monitor_heart') + `
       <div class="card mb-4 flex items-center gap-4 ${all ? 'border-primary/30' : 'border-warning/40'}">
         <span class="flex h-12 w-12 items-center justify-center rounded-full ${all ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning'}">${UI.icon(all ? 'check_circle' : 'warning', 'text-[28px]')}</span>
         <div><div class="text-headline-md">${all ? 'Todos los sistemas operativos' : 'Servicio degradado'}</div>
@@ -258,7 +263,7 @@ window.StatusView = {
       </div>
       <div class="card mt-4 flex flex-wrap items-center justify-between gap-3">
         <div><div class="text-label-lg">Modo ligero</div><div class="text-body-sm text-ink-secondary">No carga imágenes; útil con conexiones lentas o datos limitados.</div></div>
-        <button class="switch ${this.isLite() ? 'on' : ''}" onclick="StatusView.setLite(!StatusView.isLite()); this.classList.toggle('on')" aria-label="Modo ligero"></button>
+        <button class="switch ${this.isLite() ? 'on' : ''}" ${UI.on('click', 'StatusView.toggleLite', UI.EL)} aria-label="Modo ligero"></button>
       </div>`;
   },
 
@@ -275,7 +280,7 @@ window.StatusView = {
     if (path) { try { sessionStorage.setItem('forfunable_after_login', path); } catch (_) {} }
     UI.modal({
       title: 'Inicia sesión para continuar', icon: 'lock_person', tone: 'primary', body: `<p>${text}</p>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Ahora no</button><a href="/register" data-link class="btn-secondary" onclick="UI.closeModal()">Crear cuenta</a><a href="/login" data-link class="btn-primary" onclick="UI.closeModal()">Iniciar sesión</a>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Ahora no</button><a href="/register" data-link class="btn-secondary" ${UI.on('click', 'UI.closeModal')}>Crear cuenta</a><a href="/login" data-link class="btn-primary" ${UI.on('click', 'UI.closeModal')}>Iniciar sesión</a>`
     });
   },
 
@@ -290,7 +295,7 @@ window.StatusView = {
           ${UI.field('reauth-email', 'Correo electrónico', { type: 'email', value: '', placeholder: 'nombre@correo.com' })}
           ${UI.field('reauth-password', 'Contraseña', { type: 'password' })}
         </div>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal(); Router.navigate('/')">Salir</button><button class="btn-primary" onclick="StatusView.reauth()">Volver a ingresar</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'StatusView.leave')}>Salir</button><button class="btn-primary" ${UI.on('click', 'StatusView.reauth')}>Volver a ingresar</button>`
     });
     if (last) document.getElementById('reauth-email').placeholder = `Correo de @${last}`;
   },
@@ -317,7 +322,7 @@ window.StatusView = {
     UI.modal({
       title: 'Vas muy rápido', icon: 'speed', tone: 'warning',
       body: `<p>${UI.esc(err.message || 'Superaste el límite de solicitudes.')} Espera un minuto antes de seguir votando o publicando.</p>`,
-      actions: `<button class="btn-primary" onclick="UI.closeModal()">Entendido</button>`
+      actions: `<button class="btn-primary" ${UI.on('click', 'UI.closeModal')}>Entendido</button>`
     });
   },
 

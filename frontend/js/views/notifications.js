@@ -47,7 +47,7 @@ window.NotificationsView = {
     $main().innerHTML = `
       ${UI.pageHeader('Notificaciones', 'Respuestas, mensajes, comunidades y avisos de moderación.', `
         <a href="/settings/notifications" data-link class="btn-secondary">${UI.icon('tune', 'text-[18px]')} Preferencias</a>
-        <button class="btn-primary" onclick="NotificationsView.markAllAsRead()">${UI.icon('done_all', 'text-[18px]')} Marcar todo como leído</button>`, 'notifications')}
+        <button class="btn-primary" ${UI.on('click', 'NotificationsView.markAllAsRead')}>${UI.icon('done_all', 'text-[18px]')} Marcar todo como leído</button>`, 'notifications')}
       <div id="notif-filters" class="mb-4"></div>
       <div id="notifications-list">${UI.skeletonPosts(3)}</div>`;
     await this.load();
@@ -59,7 +59,7 @@ window.NotificationsView = {
       this.paint();
       this.paintRail();
     } catch (err) {
-      document.getElementById('notifications-list').innerHTML = UI.error(err, 'NotificationsView.load()');
+      document.getElementById('notifications-list').innerHTML = UI.error(err, () => NotificationsView.load());
     }
   },
 
@@ -124,14 +124,14 @@ window.NotificationsView = {
     const [icon, cls] = this.style(n);
     const many = g.items.length > 1;
     return `
-      <div class="group flex cursor-pointer items-start gap-3 px-4 py-3.5 transition-colors hover:bg-surface-elevated ${n.is_read ? 'opacity-70' : ''}" onclick="NotificationsView.open(${UI.arg(g.items.map(x => x.id).join(','))})">
+      <div class="group flex cursor-pointer items-start gap-3 px-4 py-3.5 transition-colors hover:bg-surface-elevated ${n.is_read ? 'opacity-70' : ''}" ${UI.on('click', 'NotificationsView.open', g.items.map(x => x.id).join(','))}>
         <span class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${cls}">${UI.icon(icon, 'text-[20px]')}${many ? `<span class="absolute -right-1 -top-1 rounded-full bg-surface-elevated px-1.5 font-mono text-[10px] text-ink ring-1 ring-line">${g.items.length}</span>` : ''}</span>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 text-label-md text-ink-secondary">${UI.esc(n.title)}${!n.is_read ? '<span class="h-2 w-2 rounded-full bg-primary"></span>' : ''}</div>
           <div class="mt-0.5 text-body-md text-ink">${many ? `${g.items.length} avisos · ${UI.esc(n.message)}` : UI.esc(n.message)}</div>
           <div class="mt-1 text-body-sm text-ink-muted">${window.utils.formatTime(n.created_at)}</div>
         </div>
-        ${!n.is_read ? `<button class="btn-ghost btn-sm opacity-0 group-hover:opacity-100" onclick="event.stopPropagation(); NotificationsView.markAsRead(${UI.arg(g.items.map(x => x.id).join(','))})" title="Marcar como leída">${UI.icon('done', 'text-[17px]')}</button>` : ''}
+        ${!n.is_read ? `<button class="btn-ghost btn-sm opacity-0 group-hover:opacity-100" ${UI.on('click.stop', 'NotificationsView.markAsRead', g.items.map(x => x.id).join(','))} title="Marcar como leída">${UI.icon('done', 'text-[17px]')}</button>` : ''}
       </div>`;
   },
 

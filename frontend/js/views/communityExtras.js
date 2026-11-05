@@ -36,7 +36,7 @@ window.CommunityExtras = {
           : pending ? `
             <div class="mt-5 flex items-center gap-2 rounded border border-line bg-surface-base px-4 py-2 text-body-sm">${UI.icon('hourglass_top', 'text-[18px] text-warning')} Solicitud enviada ${window.utils.formatTime(pending.created_at)} · pendiente de revisión</div>
             <a href="/requests" data-link class="btn-ghost btn-sm mt-3">Ver mis solicitudes</a>`
-          : c.id ? `<button class="btn-primary mt-5" onclick="CommunityExtras.requestModal(${UI.arg(c.id)}, ${UI.arg(c.name)})">${UI.icon('lock_open', 'text-[18px]')} Solicitar acceso</button>`
+          : c.id ? `<button class="btn-primary mt-5" ${UI.on('click', 'CommunityExtras.requestModal', c.id, c.name)}>${UI.icon('lock_open', 'text-[18px]')} Solicitar acceso</button>`
           : c.name ? `<a href="/c/${encodeURIComponent(c.name)}" data-link class="btn-primary mt-5">Ir a c/${name}</a>` : ''}
       </div>`;
   },
@@ -50,8 +50,8 @@ window.CommunityExtras = {
       body: `<p class="mb-3">La moderación verá tu nombre de usuario, tu karma y este mensaje.</p>
         ${rules.length ? `<div class="mb-3 rounded border border-line bg-surface-base p-3 text-body-sm"><div class="mb-1 text-label-sm uppercase tracking-wider text-ink-muted">Normas que aceptas</div>${rules.map((r, i) => `<div><span class="font-mono text-secondary">${i + 1}.</span> ${UI.esc(r)}</div>`).join('')}</div>` : ''}
         <div class="mb-1.5 flex justify-between"><label class="label mb-0" for="req-msg">¿Por qué quieres unirte? (opcional)</label><span id="req-count" class="font-mono text-body-sm text-ink-muted">0 / 500</span></div>
-        <textarea id="req-msg" class="input" rows="3" maxlength="500" placeholder="Ej: trabajo con Cloud Run a diario y quiero compartir mis despliegues" oninput="document.getElementById('req-count').textContent = this.value.length + ' / 500'"></textarea>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-primary" id="req-send" onclick="CommunityExtras.sendRequest(${UI.arg(id)}, ${UI.arg(name)})">Enviar solicitud</button>`
+        <textarea id="req-msg" class="input" rows="3" maxlength="500" placeholder="Ej: trabajo con Cloud Run a diario y quiero compartir mis despliegues" ${UI.on('input', 'UI.count', UI.EL, 'req-count', 500)}></textarea>`,
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-primary" id="req-send" ${UI.on('click', 'CommunityExtras.sendRequest', id, name)}>Enviar solicitud</button>`
     });
     document.getElementById('req-msg').focus();
   },
@@ -86,7 +86,7 @@ window.CommunityExtras = {
     const box = document.getElementById('my-requests');
     let list;
     try { list = await window.api.myAccessRequests(); } catch (err) {
-      box.innerHTML = err.error === 'FEATURE_UNAVAILABLE' ? this.unavailable() : UI.error(err, 'CommunityExtras.myRequests()');
+      box.innerHTML = err.error === 'FEATURE_UNAVAILABLE' ? this.unavailable() : UI.error(err, () => CommunityExtras.myRequests());
       return;
     }
     if (!list.length) {
@@ -150,7 +150,7 @@ window.CommunityExtras = {
     const box = document.getElementById('req-list');
     let list;
     try { list = await window.api.listAccessRequests(this.c.name, this.reqStatus === 'ALL' ? '' : this.reqStatus); } catch (err) {
-      box.innerHTML = err.error === 'FEATURE_UNAVAILABLE' ? this.unavailable() : UI.error(err, 'CommunityExtras.loadRequests()');
+      box.innerHTML = err.error === 'FEATURE_UNAVAILABLE' ? this.unavailable() : UI.error(err, () => CommunityExtras.loadRequests());
       return;
     }
     document.getElementById('req-tabs').innerHTML = UI.tabs([
@@ -177,8 +177,8 @@ window.CommunityExtras = {
           ${r.status === 'PENDING' ? `
             <div class="mt-3 flex flex-wrap items-center gap-2">
               <input id="note-${UI.esc(r.id)}" class="input flex-1 py-1.5 text-body-sm" placeholder="Nota para el solicitante (opcional, se envía si rechazas)">
-              <button class="btn-danger-ghost btn-sm" onclick="CommunityExtras.decide(${UI.arg(r.id)}, 'REJECT')">${UI.icon('close', 'text-[17px]')} Rechazar</button>
-              <button class="btn-primary btn-sm" onclick="CommunityExtras.decide(${UI.arg(r.id)}, 'APPROVE')">${UI.icon('check', 'text-[17px]')} Aprobar</button>
+              <button class="btn-danger-ghost btn-sm" ${UI.on('click', 'CommunityExtras.decide', r.id, 'REJECT')}>${UI.icon('close', 'text-[17px]')} Rechazar</button>
+              <button class="btn-primary btn-sm" ${UI.on('click', 'CommunityExtras.decide', r.id, 'APPROVE')}>${UI.icon('check', 'text-[17px]')} Aprobar</button>
             </div>` : r.decision_note ? `<p class="mt-2 text-body-sm"><span class="text-ink-muted">Nota:</span> ${UI.esc(r.decision_note)}</p>` : ''}
         </article>`;
     }).join('');
@@ -203,7 +203,7 @@ window.CommunityExtras = {
         <div class="card p-0">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
             <div><h2 class="text-headline-sm">Flairs de publicación</h2><p class="text-body-sm text-ink-secondary">Etiquetas para clasificar y filtrar el contenido de c/${UI.esc(c.name)}.</p></div>
-            <button class="btn-primary btn-sm" onclick="CommunityExtras.flairModal()">${UI.icon('add', 'text-[18px]')} Nuevo flair</button>
+            <button class="btn-primary btn-sm" ${UI.on('click', 'CommunityExtras.flairModal')}>${UI.icon('add', 'text-[18px]')} Nuevo flair</button>
           </div>
           <div id="flair-list">${UI.skeletonPosts(1)}</div>
         </div>
@@ -228,7 +228,7 @@ window.CommunityExtras = {
       const data = await window.api.listFlairs(this.c.name);
       this.flairList = data.items || [];
     } catch (err) {
-      box.innerHTML = err.error === 'FEATURE_UNAVAILABLE' ? this.unavailable('Flairs no disponibles') : UI.error(err, 'CommunityExtras.loadFlairs()');
+      box.innerHTML = err.error === 'FEATURE_UNAVAILABLE' ? this.unavailable('Flairs no disponibles') : UI.error(err, () => CommunityExtras.loadFlairs());
       return;
     }
     const list = this.flairList;
@@ -237,18 +237,18 @@ window.CommunityExtras = {
         ${list.map((f, i) => `
           <li class="flex flex-wrap items-center gap-3 px-4 py-3">
             <div class="flex flex-col">
-              <button class="btn-icon p-0.5" ${i === 0 ? 'disabled' : ''} onclick="CommunityExtras.moveFlair(${i}, -1)" aria-label="Subir">${UI.icon('keyboard_arrow_up', 'text-[18px]')}</button>
-              <button class="btn-icon p-0.5" ${i === list.length - 1 ? 'disabled' : ''} onclick="CommunityExtras.moveFlair(${i}, 1)" aria-label="Bajar">${UI.icon('keyboard_arrow_down', 'text-[18px]')}</button>
+              <button class="btn-icon p-0.5" ${i === 0 ? 'disabled' : ''} ${UI.on('click', 'CommunityExtras.moveFlair', i, -1)} aria-label="Subir">${UI.icon('keyboard_arrow_up', 'text-[18px]')}</button>
+              <button class="btn-icon p-0.5" ${i === list.length - 1 ? 'disabled' : ''} ${UI.on('click', 'CommunityExtras.moveFlair', i, 1)} aria-label="Bajar">${UI.icon('keyboard_arrow_down', 'text-[18px]')}</button>
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">${UI.flairChip(f)}${f.mod_only ? `<span class="chip-tertiary">${UI.icon('shield', 'text-[12px]')} Solo moderación</span>` : ''}</div>
               ${f.description ? `<p class="mt-1 text-body-sm text-ink-secondary">${UI.esc(f.description)}</p>` : ''}
             </div>
             <span class="font-mono text-body-sm text-ink-muted">${f.posts_count || 0} publicaciones</span>
-            <button class="btn-ghost btn-sm" onclick="CommunityExtras.flairModal(${UI.arg(f.id)})">${UI.icon('edit', 'text-[17px]')} Editar</button>
-            <button class="btn-icon text-danger" onclick="CommunityExtras.deleteFlair(${UI.arg(f.id)})" aria-label="Eliminar">${UI.icon('delete', 'text-[18px]')}</button>
+            <button class="btn-ghost btn-sm" ${UI.on('click', 'CommunityExtras.flairModal', f.id)}>${UI.icon('edit', 'text-[17px]')} Editar</button>
+            <button class="btn-icon text-danger" ${UI.on('click', 'CommunityExtras.deleteFlair', f.id)} aria-label="Eliminar">${UI.icon('delete', 'text-[18px]')}</button>
           </li>`).join('')}
-      </ul>` : `<div class="p-4">${UI.empty({ icon: 'sell', title: 'Sin flairs todavía', text: 'Crea el primero: «Pregunta», «Tutorial», «Showcase»…', action: `<button class="btn-primary" onclick="CommunityExtras.flairModal()">Crear flair</button>` })}</div>`;
+      </ul>` : `<div class="p-4">${UI.empty({ icon: 'sell', title: 'Sin flairs todavía', text: 'Crea el primero: «Pregunta», «Tutorial», «Showcase»…', action: `<button class="btn-primary" ${UI.on('click', 'CommunityExtras.flairModal')}>Crear flair</button>` })}</div>`;
   },
 
   flairModal(id = '') {
@@ -256,22 +256,22 @@ window.CommunityExtras = {
     UI.modal({
       title: id ? 'Editar flair' : 'Nuevo flair', icon: 'sell', tone: 'secondary',
       body: `
-        ${UI.field('fl-name', 'Nombre', { value: UI.plain(f.name), placeholder: 'Ej: Pregunta', attrs: 'maxlength="30" oninput="CommunityExtras.flairPreview()"' })}
+        ${UI.field('fl-name', 'Nombre', { value: UI.plain(f.name), placeholder: 'Ej: Pregunta', attrs: `maxlength="30" ${UI.on('input', 'CommunityExtras.flairPreview')}` })}
         <label class="label">Color</label>
         <div class="mb-4 flex flex-wrap gap-2" id="fl-colors">
-          ${this.colors.map(([v, l]) => `<button type="button" data-color="${v}" class="rounded-chip p-0.5 ${f.color === v ? 'ring-2 ring-primary' : ''}" onclick="CommunityExtras.pickColor('${v}')">${UI.flairChip({ name: l, color: v })}</button>`).join('')}
+          ${this.colors.map(([v, l]) => `<button type="button" data-color="${v}" class="rounded-chip p-0.5 ${f.color === v ? 'ring-2 ring-primary' : ''}" ${UI.on('click', 'CommunityExtras.pickColor', v)}>${UI.flairChip({ name: l, color: v })}</button>`).join('')}
         </div>
-        ${UI.field('fl-desc', 'Descripción (opcional)', { value: UI.plain(f.description), placeholder: 'Cuándo usar este flair', attrs: 'maxlength="120" oninput="CommunityExtras.flairPreview()"' })}
+        ${UI.field('fl-desc', 'Descripción (opcional)', { value: UI.plain(f.description), placeholder: 'Cuándo usar este flair', attrs: `maxlength="120" ${UI.on('input', 'CommunityExtras.flairPreview')}` })}
         <div class="mb-4 flex items-center justify-between gap-3 rounded border border-line bg-surface-base p-3">
           <div><div class="text-label-lg">Solo moderación</div><div class="text-body-sm text-ink-secondary">Los miembros no podrán elegirlo al publicar.</div></div>
-          <button type="button" id="fl-mod" class="switch ${f.mod_only ? 'on' : ''}" onclick="this.classList.toggle('on')" aria-label="Solo moderación"></button>
+          <button type="button" id="fl-mod" class="switch ${f.mod_only ? 'on' : ''}" ${UI.on('click', 'UI.toggleClass', UI.EL, 'on')} aria-label="Solo moderación"></button>
         </div>
         <div class="rounded border border-dashed border-line p-3">
           <div class="mb-2 text-label-sm uppercase tracking-wider text-ink-muted">Vista previa en una publicación</div>
           <div class="flex flex-wrap items-center gap-2 text-body-sm">${UI.communityChip(this.c.name)}<span id="fl-preview"></span></div>
           <div class="mt-1 font-display text-headline-sm">¿Cómo despliego Go en Cloud Run?</div>
         </div>`,
-      actions: `<button class="btn-ghost" onclick="UI.closeModal()">Cancelar</button><button class="btn-primary" onclick="CommunityExtras.saveFlair(${UI.arg(id)}, ${f.position || 0})">${id ? 'Guardar cambios' : 'Crear flair'}</button>`
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button><button class="btn-primary" ${UI.on('click', 'CommunityExtras.saveFlair', id, f.position || 0)}>${id ? 'Guardar cambios' : 'Crear flair'}</button>`
     });
     this.flairColor = f.color || 'secondary';
     this.flairPreview();
@@ -305,6 +305,10 @@ window.CommunityExtras = {
     }
   },
 
+  flairBody(f, position) {
+    return { name: UI.plain(f.name), color: f.color || 'neutral', description: UI.plain(f.description || ''), mod_only: !!f.mod_only, position };
+  },
+
   // Reordenar: intercambia la posición con el vecino y guarda ambos
   async moveFlair(i, dir) {
     const list = this.flairList;
@@ -313,8 +317,8 @@ window.CommunityExtras = {
     const pa = i + dir, pb = i;
     try {
       await Promise.all([
-        window.api.updateFlair(this.c.id, a.id, { ...a, name: UI.plain(a.name), description: UI.plain(a.description), position: pa }),
-        window.api.updateFlair(this.c.id, b.id, { ...b, name: UI.plain(b.name), description: UI.plain(b.description), position: pb })
+        window.api.updateFlair(this.c.id, a.id, this.flairBody(a, pa)),
+        window.api.updateFlair(this.c.id, b.id, this.flairBody(b, pb))
       ]);
       this.loadFlairs();
     } catch (err) { StatusView.toastError(err, 'No se pudo reordenar'); }
@@ -351,14 +355,14 @@ window.CommunityExtras = {
             ${UI.icon('arrow_downward', 'text-ink-muted')}
           </div>
 
-          <div class="mt-4">${UI.field('own-user', 'Nuevo fundador (nombre de usuario)', { placeholder: 'usuario', attrs: 'autocomplete="off" list="own-candidates" oninput="CommunityExtras.ownReady()"', help: 'Debe ser una cuenta activa. Se recomienda que ya sea moderador.' })}
+          <div class="mt-4">${UI.field('own-user', 'Nuevo fundador (nombre de usuario)', { placeholder: 'usuario', attrs: `autocomplete="off" list="own-candidates" ${UI.on('input', 'CommunityExtras.ownReady')}`, help: 'Debe ser una cuenta activa. Se recomienda que ya sea moderador.' })}
             <datalist id="own-candidates">${candidates.map(m => `<option value="${UI.esc(m.username)}">`).join('')}</datalist>
-            ${candidates.length ? `<div class="-mt-2 mb-4 flex flex-wrap gap-2">${candidates.map(m => `<button type="button" class="chip-neutral cursor-pointer py-1 hover:text-ink" onclick="document.getElementById('own-user').value = ${UI.arg(m.username)}; CommunityExtras.ownReady()">@${UI.esc(m.username)}</button>`).join('')}</div>` : ''}
+            ${candidates.length ? `<div class="-mt-2 mb-4 flex flex-wrap gap-2">${candidates.map(m => `<button type="button" class="chip-neutral cursor-pointer py-1 hover:text-ink" ${UI.on('click', 'CommunityExtras.pickOwner', m.username)}>@${UI.esc(m.username)}</button>`).join('')}</div>` : ''}
           </div>
-          ${UI.field('own-confirm', `Escribe <span class="font-mono text-ink">${UI.esc(c.name)}</span> para confirmar`, { attrs: 'autocomplete="off" oninput="CommunityExtras.ownReady()"' })}
+          ${UI.field('own-confirm', `Escribe <span class="font-mono text-ink">${UI.esc(c.name)}</span> para confirmar`, { attrs: `autocomplete="off" ${UI.on('input', 'CommunityExtras.ownReady')}` })}
           <div class="mt-6 flex justify-end gap-2 border-t border-line pt-5">
             <a href="/c/${encodeURIComponent(c.name)}" data-link class="btn-ghost">Cancelar</a>
-            <button class="btn-danger px-5" id="btn-transfer" disabled onclick="CommunityExtras.transfer(this)">${UI.icon('swap_horiz', 'text-[18px]')} Transferir propiedad</button>
+            <button class="btn-danger px-5" id="btn-transfer" disabled ${UI.on('click', 'CommunityExtras.transfer', UI.EL)}>${UI.icon('swap_horiz', 'text-[18px]')} Transferir propiedad</button>
           </div>
         </div>
         <div class="card h-fit">
@@ -371,6 +375,11 @@ window.CommunityExtras = {
           </ul>
         </div>
       </div>`;
+  },
+
+  pickOwner(username) {
+    document.getElementById('own-user').value = username;
+    this.ownReady();
   },
 
   ownReady() {

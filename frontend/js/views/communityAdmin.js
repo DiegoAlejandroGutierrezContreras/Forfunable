@@ -48,7 +48,7 @@ window.CommunityAdminView = {
     const toggle = (id, on, title, text, icon) => `
       <div class="flex items-start justify-between gap-4 rounded border border-line bg-surface-base p-4">
         <div class="flex gap-3">${UI.icon(icon, 'text-ink-secondary')}<div><div class="text-label-lg">${title}</div><div class="text-body-sm text-ink-secondary">${text}</div></div></div>
-        <button type="button" id="${id}" class="switch ${on ? 'on' : ''}" onclick="this.classList.toggle('on')" aria-label="${title}"></button>
+        <button type="button" id="${id}" class="switch ${on ? 'on' : ''}" ${UI.on('click', 'UI.toggleClass', UI.EL, 'on')} aria-label="${title}"></button>
       </div>`;
     $main().innerHTML = this.header(c, 'settings') + `
       <div class="card p-5 sm:p-6">
@@ -61,7 +61,7 @@ window.CommunityAdminView = {
         </div>
         <div class="mt-6 flex justify-end gap-2 border-t border-line pt-5">
           <a href="/c/${encodeURIComponent(c.name)}" data-link class="btn-ghost">Cancelar</a>
-          <button class="btn-primary px-5" onclick="CommunityAdminView.saveSettings(this)">${UI.icon('save', 'text-[18px]')} Guardar ajustes</button>
+          <button class="btn-primary px-5" ${UI.on('click', 'CommunityAdminView.saveSettings', UI.EL)}>${UI.icon('save', 'text-[18px]')} Guardar ajustes</button>
         </div>
       </div>`;
     Router.setRail(CommunityView.aboutCard(c) + CommunityView.modsCard(c));
@@ -96,7 +96,7 @@ window.CommunityAdminView = {
           <div>${UI.field('mod-user', 'Usuario', { placeholder: 'nombre_de_usuario' })}</div>
           <div class="mb-4"><label class="label" for="mod-role">Rol</label>
             <select id="mod-role" class="input">${Object.entries(roles).reverse().map(([k, [l]]) => `<option value="${k}">${l}</option>`).join('')}</select></div>
-          <button class="btn-primary sm:mt-6" onclick="CommunityAdminView.assign(this)">${UI.icon('person_add', 'text-[18px]')} Asignar</button>
+          <button class="btn-primary sm:mt-6" ${UI.on('click', 'CommunityAdminView.assign', UI.EL)}>${UI.icon('person_add', 'text-[18px]')} Asignar</button>
         </div>
         <div class="grid gap-2 sm:grid-cols-3">
           ${Object.entries(roles).map(([k, [l, d]]) => `<div class="rounded bg-surface-base p-3"><div class="text-label-md text-ink">${l}</div><div class="mt-0.5 text-body-sm text-ink-muted">${d}</div></div>`).join('')}
@@ -154,7 +154,7 @@ window.CommunityAdminView = {
             <select id="ban-days" class="input"><option value="1">1 día</option><option value="7" selected>7 días</option><option value="30">30 días</option><option value="90">90 días</option><option value="0">Permanente</option></select></div>
         </div>
         ${UI.field('ban-reason', 'Motivo (visible en el registro)', { textarea: true, rows: 2, placeholder: 'Ej: Spam reiterado tras dos advertencias (regla 2)' })}
-        <div class="flex justify-end"><button class="btn-danger" onclick="CommunityAdminView.ban(this)">${UI.icon('block', 'text-[18px]')} Aplicar sanción</button></div>
+        <div class="flex justify-end"><button class="btn-danger" ${UI.on('click', 'CommunityAdminView.ban', UI.EL)}>${UI.icon('block', 'text-[18px]')} Aplicar sanción</button></div>
       </div>
       <div class="card mb-4 p-0">
         <div class="border-b border-line px-4 py-3 text-headline-sm">Sanciones vigentes</div>
@@ -177,7 +177,7 @@ window.CommunityAdminView = {
           <td><a href="/u/${encodeURIComponent(b.username || '')}" data-link class="flex items-center gap-2 hover:text-secondary">${UI.avatar({ username: b.username }, 26)}@${UI.esc(b.username)}</a></td>
           <td class="max-w-[260px] text-ink-secondary">${UI.esc(b.reason)}</td>
           <td class="whitespace-nowrap">${b.expires_at ? `<span class="chip-warning">${new Date(b.expires_at).toLocaleDateString('es')}</span>` : '<span class="chip-danger">Permanente</span>'}</td>
-          <td class="text-right"><button class="btn-secondary btn-sm" onclick="CommunityAdminView.unban(${UI.arg(b.user_id)}, ${UI.arg(b.username)})">${UI.icon('lock_open', 'text-[16px]')} Levantar</button></td>
+          <td class="text-right"><button class="btn-secondary btn-sm" ${UI.on('click', 'CommunityAdminView.unban', b.user_id, b.username)}>${UI.icon('lock_open', 'text-[16px]')} Levantar</button></td>
         </tr>`).join('')}</tbody></table>` : '<p class="p-4 text-body-sm text-ink-muted">No hay sanciones vigentes.</p>';
     } catch (err) {
       box.innerHTML = `<div class="p-4">${UI.esc(err.message || 'No se pudieron cargar las sanciones')}</div>`;

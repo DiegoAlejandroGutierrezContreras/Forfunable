@@ -20,7 +20,7 @@
   <header id="app-header" class="sticky top-0 z-50 h-16 border-b border-line bg-surface-card/90 backdrop-blur-xl">
     <div class="flex h-16 items-center justify-between gap-4 px-4 lg:px-6">
       <div class="flex items-center gap-2 lg:w-60">
-        <button class="btn-icon lg:hidden" onclick="Router.toggleSidebar()" aria-label="Abrir menú"><span class="icon">menu</span></button>
+        <button class="btn-icon lg:hidden" data-on-click="Router.toggleSidebar" aria-label="Abrir menú"><span class="icon">menu</span></button>
         <a href="/" data-link class="flex items-center gap-2.5">
           <span class="flex h-8 w-8 items-center justify-center rounded border border-line bg-surface-elevated">
             <svg viewBox="0 0 100 100" class="h-5 w-5"><path d="M24 30h52M24 50h34M24 70h16" stroke="#00e676" stroke-width="10" stroke-linecap="round"/><circle cx="70" cy="70" r="7" fill="#38bdf8"/></svg>
@@ -29,7 +29,7 @@
         </a>
       </div>
 
-      <form class="relative hidden max-w-xl flex-1 md:block" onsubmit="event.preventDefault(); Router.navigate('/search?q=' + encodeURIComponent(this.q.value.trim()))">
+      <form class="relative hidden max-w-xl flex-1 md:block" data-on-submit="Router.headerSearch" data-args-submit='[{"$":"el"}]' data-prevent-submit>
         <span class="icon pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-ink-muted">search</span>
         <input name="q" id="header-search" class="input py-2 pl-10 pr-20 text-body-sm" placeholder="Buscar publicaciones, comunidades o usuarios..." autocomplete="off">
         <kbd class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-line bg-surface-elevated px-1.5 py-0.5 text-label-sm text-ink-secondary">Ctrl + K</kbd>
@@ -78,7 +78,7 @@
         </div>
       </div>
     </aside>
-    <div id="sidebar-scrim" class="fixed inset-0 top-16 z-30 hidden bg-black/50 lg:hidden" onclick="Router.toggleSidebar(false)"></div>
+    <div id="sidebar-scrim" class="fixed inset-0 top-16 z-30 hidden bg-black/50 lg:hidden" data-on-click="Router.toggleSidebar" data-args-click="[false]"></div>
 
     <!-- Contenido -->
     <div class="min-w-0 flex-1">
@@ -91,6 +91,8 @@
 
   <div id="toast-container" class="fixed bottom-4 right-4 z-[110] flex max-w-sm flex-col gap-2"></div>
 
+  <script src="/static/js/vendor/zod.min.js"></script>
+  <script src="/static/js/schemas.js"></script>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/ui.js"></script>
   <script src="/static/js/views/auth.js"></script>

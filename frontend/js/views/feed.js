@@ -4,6 +4,8 @@
  */
 
 window.FeedView = {
+  quickPost(form) { Router.navigate('/submit?title=' + encodeURIComponent(form.t.value.trim())); },
+
   activeFilter: 'hot',
   filters: [
     { id: 'hot', label: 'Para ti', icon: 'auto_awesome', hint: 'Votos atenuados por antigüedad (Hot Ranking)' },
@@ -22,7 +24,7 @@ window.FeedView = {
         <div id="feed-tabs"></div>
         ${u ? `
           <div class="card flex flex-col gap-3">
-            <form class="flex items-center gap-3" onsubmit="event.preventDefault(); Router.navigate('/submit?title=' + encodeURIComponent(this.t.value.trim()))">
+            <form class="flex items-center gap-3" ${UI.on('submit.prevent', 'FeedView.quickPost', UI.EL)}>
               ${UI.avatar(u, 40)}
               <input name="t" class="input flex-1" placeholder="Comparte una idea, discusión técnica o proyecto..." autocomplete="off">
             </form>
@@ -69,7 +71,7 @@ window.FeedView = {
           action: `<a href="/submit" data-link class="btn-primary">Crear publicación</a><a href="/communities" data-link class="btn-secondary">Explorar comunidades</a>`
         });
     } catch (err) {
-      box.innerHTML = UI.error(err, 'FeedView.load()');
+      box.innerHTML = UI.error(err, () => FeedView.load());
     }
   },
 
@@ -94,7 +96,7 @@ window.FeedView = {
     } catch (err) {
       box.innerHTML = err.error === 'PRIVATE_COMMUNITY'
         ? CommunityExtras.gateCard(community, CommunityView.pendingRequest, err.message)
-        : UI.error(err, 'FeedView.setCommunityFilter(FeedView.communityFilter)');
+        : UI.error(err, () => FeedView.setCommunityFilter(FeedView.communityFilter));
     }
   },
 
@@ -113,8 +115,8 @@ window.FeedView = {
     if (bar) {
       bar.innerHTML = flairs.length ? `
         <span class="text-label-sm uppercase tracking-wider text-ink-muted">Filtrar</span>
-        <button class="chip-neutral cursor-pointer py-1 ${!this.flairFilter ? 'ring-1 ring-primary' : ''}" onclick="FeedView.setFlairFilter('')">Todas</button>
-        ${flairs.map(f => `<button class="cursor-pointer rounded-chip ${this.flairFilter === f.id ? 'ring-1 ring-primary' : 'opacity-80 hover:opacity-100'}" onclick="FeedView.setFlairFilter(${UI.arg(f.id)})" aria-pressed="${this.flairFilter === f.id}">${UI.flairChip(f)}</button>`).join('')}` : '';
+        <button class="chip-neutral cursor-pointer py-1 ${!this.flairFilter ? 'ring-1 ring-primary' : ''}" ${UI.on('click', 'FeedView.setFlairFilter', '')}>Todas</button>
+        ${flairs.map(f => `<button class="cursor-pointer rounded-chip ${this.flairFilter === f.id ? 'ring-1 ring-primary' : 'opacity-80 hover:opacity-100'}" ${UI.on('click', 'FeedView.setFlairFilter', f.id)} aria-pressed="${this.flairFilter === f.id}">${UI.flairChip(f)}</button>`).join('')}` : '';
     }
     const posts = (this.communityPosts || []).filter(p => !this.flairFilter || (p.flair && p.flair.id === this.flairFilter));
     const flair = flairs.find(f => f.id === this.flairFilter);
@@ -123,7 +125,7 @@ window.FeedView = {
       : UI.empty({
         icon: flair ? 'sell' : 'edit_note', title: flair ? `Sin publicaciones con «${UI.plain(flair.name)}»` : 'Aún no hay publicaciones',
         text: flair ? 'Prueba con otro flair o quita el filtro.' : `Inicia el primer debate en c/${UI.esc(community.name)}.`,
-        action: flair ? `<button class="btn-secondary" onclick="FeedView.setFlairFilter('')">Quitar filtro</button>` : `<a href="/submit?community=${encodeURIComponent(community.id)}" data-link class="btn-primary">Crear publicación</a>`
+        action: flair ? `<button class="btn-secondary" ${UI.on('click', 'FeedView.setFlairFilter', '')}>Quitar filtro</button>` : `<a href="/submit?community=${encodeURIComponent(community.id)}" data-link class="btn-primary">Crear publicación</a>`
       });
   },
 

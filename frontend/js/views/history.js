@@ -59,8 +59,8 @@ window.HistoryView = {
           <div class="mt-0.5 font-mono text-label-sm text-ink-muted">${(v.body_text || '').length} caracteres</div>
         </div>
         <div class="flex shrink-0 gap-2 pt-1">
-          <input type="radio" name="ver-a" aria-label="Comparar desde la versión ${i + 1}" class="h-4 w-4 accent-[#ff5252]" ${i === this.a ? 'checked' : ''} ${i >= this.b ? 'disabled' : ''} onchange="HistoryView.pick('a', ${i})">
-          <input type="radio" name="ver-b" aria-label="Comparar hasta la versión ${i + 1}" class="h-4 w-4 accent-[#00e676]" ${i === this.b ? 'checked' : ''} ${i <= this.a && items.length > 1 ? 'disabled' : ''} onchange="HistoryView.pick('b', ${i})">
+          <input type="radio" name="ver-a" aria-label="Comparar desde la versión ${i + 1}" class="h-4 w-4 accent-[#ff5252]" ${i === this.a ? 'checked' : ''} ${i >= this.b ? 'disabled' : ''} ${UI.on('change', 'HistoryView.pick', 'a', i)}>
+          <input type="radio" name="ver-b" aria-label="Comparar hasta la versión ${i + 1}" class="h-4 w-4 accent-[#00e676]" ${i === this.b ? 'checked' : ''} ${i <= this.a && items.length > 1 ? 'disabled' : ''} ${UI.on('change', 'HistoryView.pick', 'b', i)}>
         </div>
       </li>`).join('');
   },
@@ -107,8 +107,8 @@ window.HistoryView = {
             <span class="font-mono text-ink-muted"><span class="text-primary">+${added}</span> / <span class="text-danger">−${removed}</span> ${this.unit === 'word' ? 'palabras' : 'líneas'}</span>
           </div>
           <div class="flex items-center gap-1 rounded border border-line p-0.5">
-            <button class="tab ${this.mode === 'unified' ? 'active' : ''}" onclick="HistoryView.setMode('unified')">Unificado</button>
-            <button class="tab ${this.mode === 'split' ? 'active' : ''}" onclick="HistoryView.setMode('split')">Lado a lado</button>
+            <button class="tab ${this.mode === 'unified' ? 'active' : ''}" ${UI.on('click', 'HistoryView.setMode', 'unified')}>Unificado</button>
+            <button class="tab ${this.mode === 'split' ? 'active' : ''}" ${UI.on('click', 'HistoryView.setMode', 'split')}>Lado a lado</button>
           </div>
         </div>
         ${this.mode === 'unified'
@@ -120,7 +120,7 @@ window.HistoryView = {
       </div>
       <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p class="text-body-sm text-ink-muted">${UI.icon('info', 'text-[15px] align-[-3px]')} Rojo: texto retirado · Verde: texto añadido.</p>
-        ${canRestore ? `<button class="btn-secondary" onclick="HistoryView.restore(${this.a})">${UI.icon('restore', 'text-[18px]')} Restaurar «${label(this.a)}»</button>` : ''}
+        ${canRestore ? `<button class="btn-secondary" ${UI.on('click', 'HistoryView.restore', this.a)}>${UI.icon('restore', 'text-[18px]')} Restaurar «${label(this.a)}»</button>` : ''}
       </div>`;
   },
 

@@ -4,6 +4,11 @@
  */
 
 window.MembersView = {
+  search() {
+    clearTimeout(this._t);
+    this._t = setTimeout(() => this.load(), 250);
+  },
+
   sort: 'karma',
 
   render(query = {}) {
@@ -13,7 +18,7 @@ window.MembersView = {
       <div class="mb-4 flex flex-wrap items-center gap-3">
         <div class="relative min-w-[220px] flex-1">
           ${UI.icon('search', 'pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-ink-muted')}
-          <input id="members-search" class="input pl-10" placeholder="Buscar por nombre de usuario…" value="${UI.esc(query.q || '')}" oninput="clearTimeout(MembersView._t); MembersView._t = setTimeout(() => MembersView.load(), 250)">
+          <input id="members-search" class="input pl-10" placeholder="Buscar por nombre de usuario…" value="${UI.esc(query.q || '')}" ${UI.on('input', 'MembersView.search')}>
         </div>
         <div id="members-sort"></div>
       </div>
@@ -77,7 +82,7 @@ window.MembersView = {
           </table>
         </div>`;
     } catch (err) {
-      box.innerHTML = UI.error(err, 'MembersView.load()');
+      box.innerHTML = UI.error(err, () => MembersView.load());
     }
   }
 };
