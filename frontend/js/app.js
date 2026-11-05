@@ -17,6 +17,7 @@ window.Router = {
     r('/onboarding', () => AuthView.onboarding(), { layout: 'full', auth: true });
     r('/submit', (p, q) => CreatePostView.render(q), { layout: 'wide', auth: true });
     r('/posts/:id/edit', p => CreatePostView.edit(p.id), { layout: 'wide', auth: true });
+    r('/posts/:id/history', (p, q) => HistoryView.render(p.id, q), { layout: 'wide' });
     r('/posts/:id', p => PostDetailView.render(p.id));
     // Etapa 2: comunidades, búsqueda, miembros y perfil
     r('/communities', (p, q) => CommunityView.explore(q));
@@ -25,11 +26,19 @@ window.Router = {
     r('/c/:name/settings', p => CommunityAdminView.settings(p.name), { auth: true, roles: ['COMMUNITY_MOD', 'GLOBAL_ADMIN'] });
     r('/c/:name/moderators', p => CommunityAdminView.moderators(p.name), { auth: true, roles: ['COMMUNITY_MOD', 'GLOBAL_ADMIN'] });
     r('/c/:name/bans', p => CommunityAdminView.bans(p.name), { auth: true, roles: ['COMMUNITY_MOD', 'GLOBAL_ADMIN'] });
+    // Funciones extendidas: el permiso (fundador o moderador local) lo comprueba la vista y el servidor
+    r('/c/:name/flairs', p => CommunityExtras.flairs(p.name), { auth: true });
+    r('/c/:name/requests', (p, q) => CommunityExtras.requests(p.name, q), { auth: true });
+    r('/c/:name/ownership', p => CommunityExtras.ownership(p.name), { auth: true });
     r('/c/:name', (p, q) => CommunityView.render(p.name, q));
     r('/search', (p, q) => SearchView.render(q));
     r('/members', (p, q) => MembersView.render(q));
     r('/profile', () => ProfileView.render(null), { auth: true });
     r('/u/:name', p => ProfileView.render(p.name));
+    r('/saved', (p, q) => SavedView.render(q), { layout: 'wide', auth: true });
+    r('/requests', () => CommunityExtras.myRequests(), { auth: true });
+    r('/appeals', (p, q) => AppealsView.render(q), { layout: 'wide', auth: true });
+    r('/account/deletion', () => AccountView.deletion(), { layout: 'wide' });
     r('/settings', () => SettingsView.render('home'), { layout: 'wide', auth: true });
     r('/settings/:section', p => SettingsView.render(p.section), { layout: 'wide', auth: true });
     // Etapa 3: chat, notificaciones, moderación y administración
@@ -142,6 +151,8 @@ window.Router = {
     main.innerHTML = '';
     if ((route.layout || 'default') === 'default') this.renderRail(route.rail);
     try {
+      if (await AccountView.checkPending(path)) return;
+      if (window.api.user) await window.api.savedIds();
       await route.view(params, query);
     } catch (err) {
       console.error('[Router]', err);
@@ -202,6 +213,7 @@ window.Router = {
           </div>
           <div class="pt-1.5">
             <a href="/profile" data-link class="nav-item">${UI.icon('person', 'text-[19px]')}Mi perfil</a>
+            <a href="/saved" data-link class="nav-item">${UI.icon('bookmarks', 'text-[19px]')}Guardados</a>
             <a href="/settings" data-link class="nav-item">${UI.icon('settings', 'text-[19px]')}Ajustes</a>
             <button class="nav-item w-full text-danger hover:text-danger" onclick="Router.logout()">${UI.icon('logout', 'text-[19px]')}Cerrar sesión</button>
           </div>

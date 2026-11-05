@@ -76,23 +76,55 @@ window.FeedView = {
   // Lista de publicaciones de una comunidad (02_12), con los mismos filtros
   async renderCommunity(container, community, filter = this.activeFilter) {
     this.communityFilter = filter;
+    if (!this.community || this.community.id !== community.id) this.flairFilter = '';
     this.community = community;
     container.innerHTML = `
       <div class="mb-4">${UI.tabs(this.filters, filter, 'FeedView.setCommunityFilter')}</div>
+      <div id="community-flairs" class="mb-4 flex flex-wrap items-center gap-2 empty:hidden"></div>
       <div id="community-posts" class="flex flex-col gap-4">${UI.skeletonPosts(2)}</div>`;
     const box = document.getElementById('community-posts');
     try {
-      const posts = await window.api.listPosts({ community_id: community.id, sort: this.sortParam(filter), limit: 50 });
-      box.innerHTML = posts.length
-        ? posts.map(p => UI.postCard(p)).join('')
-        : UI.empty({
-          icon: 'edit_note', title: 'Aún no hay publicaciones',
-          text: `Inicia el primer debate en c/${UI.esc(community.name)}.`,
-          action: `<a href="/submit?community=${encodeURIComponent(community.id)}" data-link class="btn-primary">Crear publicación</a>`
-        });
+      const [posts, flairs] = await Promise.all([
+        window.api.listPosts({ community_id: community.id, sort: this.sortParam(filter), limit: 50 }),
+        window.api.listFlairs(community.name).then(d => d.items || []).catch(() => [])
+      ]);
+      this.communityPosts = posts;
+      this.communityFlairs = flairs;
+      this.paintCommunityPosts();
     } catch (err) {
-      box.innerHTML = UI.error(err, 'FeedView.setCommunityFilter(FeedView.communityFilter)');
+      box.innerHTML = err.error === 'PRIVATE_COMMUNITY'
+        ? CommunityExtras.gateCard(community, CommunityView.pendingRequest, err.message)
+        : UI.error(err, 'FeedView.setCommunityFilter(FeedView.communityFilter)');
     }
+  },
+
+  // 02_19 Filtro por flair: se aplica sobre las publicaciones ya cargadas
+  setFlairFilter(id) {
+    this.flairFilter = this.flairFilter === id ? '' : id;
+    this.paintCommunityPosts();
+  },
+
+  paintCommunityPosts() {
+    const community = this.community;
+    const flairs = this.communityFlairs || [];
+    const bar = document.getElementById('community-flairs');
+    const box = document.getElementById('community-posts');
+    if (!box) return;
+    if (bar) {
+      bar.innerHTML = flairs.length ? `
+        <span class="text-label-sm uppercase tracking-wider text-ink-muted">Filtrar</span>
+        <button class="chip-neutral cursor-pointer py-1 ${!this.flairFilter ? 'ring-1 ring-primary' : ''}" onclick="FeedView.setFlairFilter('')">Todas</button>
+        ${flairs.map(f => `<button class="cursor-pointer rounded-chip ${this.flairFilter === f.id ? 'ring-1 ring-primary' : 'opacity-80 hover:opacity-100'}" onclick="FeedView.setFlairFilter(${UI.arg(f.id)})" aria-pressed="${this.flairFilter === f.id}">${UI.flairChip(f)}</button>`).join('')}` : '';
+    }
+    const posts = (this.communityPosts || []).filter(p => !this.flairFilter || (p.flair && p.flair.id === this.flairFilter));
+    const flair = flairs.find(f => f.id === this.flairFilter);
+    box.innerHTML = posts.length
+      ? posts.map(p => UI.postCard(p)).join('')
+      : UI.empty({
+        icon: flair ? 'sell' : 'edit_note', title: flair ? `Sin publicaciones con «${UI.plain(flair.name)}»` : 'Aún no hay publicaciones',
+        text: flair ? 'Prueba con otro flair o quita el filtro.' : `Inicia el primer debate en c/${UI.esc(community.name)}.`,
+        action: flair ? `<button class="btn-secondary" onclick="FeedView.setFlairFilter('')">Quitar filtro</button>` : `<a href="/submit?community=${encodeURIComponent(community.id)}" data-link class="btn-primary">Crear publicación</a>`
+      });
   },
 
   setCommunityFilter(filter) {

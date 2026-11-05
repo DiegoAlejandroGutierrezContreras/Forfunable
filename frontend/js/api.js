@@ -29,6 +29,7 @@ class ApiClient {
   }
 
   setSession(token, user) {
+    if (!user || (this.user && this.user.id !== user.id)) this._savedIds = null;
     this.token = token;
     this.user = this.withRole(user);
     if (user) {
@@ -548,6 +549,99 @@ class ApiClient {
   async adminListAllReports(status = '') {
     return this.listFrom(await this.request(`/admin/moderation/reports${status ? '?status=' + status : ''}`));
   }
+
+  // ==========================================
+  // 12. Guardados y colecciones (02_16)
+  // ==========================================
+
+  async listSaved(collection = '') {
+    const data = this.listFrom(await this.request(`/users/me/saved${collection ? '?collection=' + encodeURIComponent(collection) : ''}`));
+    return data.map(s => ({ ...s, post: this.withNetVotes(s.post) }));
+  }
+
+  // Ids guardados en caché para pintar los marcadores sin una petición por tarjeta
+  async savedIds(force = false) {
+    if (!this.user) return new Set();
+    if (!force && this._savedIds) return this._savedIds;
+    try { this._savedIds = new Set(this.listFrom(await this.request('/users/me/saved/ids'))); }
+    catch (_) { this._savedIds = new Set(); }
+    return this._savedIds;
+  }
+
+  async savePost(postId, collectionId = null, note = '') {
+    const res = await this.request(`/users/me/saved/${postId}`, this.json('PUT', { collection_id: collectionId || null, note }));
+    (await this.savedIds()).add(postId);
+    return res;
+  }
+
+  async unsavePost(postId) {
+    const res = await this.request(`/users/me/saved/${postId}`, { method: 'DELETE' });
+    (await this.savedIds()).delete(postId);
+    return res;
+  }
+
+  async listCollections() { return this.listFrom(await this.request('/users/me/collections')); }
+  async createCollection(name, description = '') { return await this.request('/users/me/collections', this.json('POST', { name, description })); }
+  async updateCollection(id, name, description = '') { return await this.request(`/users/me/collections/${id}`, this.json('PATCH', { name, description })); }
+  async deleteCollection(id) { return await this.request(`/users/me/collections/${id}`, { method: 'DELETE' }); }
+
+  // ==========================================
+  // 13. Historial de versiones (03_22)
+  // ==========================================
+
+  async listRevisions(postId) { return await this.request(`/posts/${postId}/revisions`); }
+
+  // ==========================================
+  // 14. Sesiones, exportación y eliminación de cuenta (01_07, 06_89, 06_90, 06_86, 06_74)
+  // ==========================================
+
+  async listSessions() { return await this.request('/users/me/sessions'); }
+  async revokeSession(id) { return await this.request(`/users/me/sessions/${id}`, { method: 'DELETE' }); }
+
+  // Cierra los demás dispositivos y rota las credenciales de este (nuevo token de acceso)
+  async revokeOtherSessions() {
+    const data = await this.request('/users/me/sessions/revoke-others', { method: 'POST' });
+    if (data && data.access_token) this.setSession(data.access_token, data.user || this.user);
+    return data;
+  }
+
+  async exportSummary() { return await this.request('/users/me/export?summary=1'); }
+  async exportData() { return await this.request('/users/me/export'); }
+  async getDeletion() { return await this.request('/users/me/deletion'); }
+  async requestDeletion(password, confirmUsername, reason = '') {
+    const data = await this.request('/users/me/deletion', this.json('POST', { password, confirm_username: confirmUsername, reason }));
+    this._savedIds = null;
+    this.setSession(null, null);
+    return data;
+  }
+  async cancelDeletion() { return await this.request('/users/me/deletion', { method: 'DELETE' }); }
+
+  // ==========================================
+  // 15. Comunidades privadas, flairs y propiedad (06_79, 06_80, 02_19, 05_40)
+  // ==========================================
+
+  async requestAccess(communityId, message = '') { return await this.request(`/communities/${communityId}/join`, this.json('POST', { message })); }
+  async myAccessRequests() { return this.listFrom(await this.request('/users/me/access-requests')); }
+  async listAccessRequests(name, status = '') { return this.listFrom(await this.request(`/communities/${encodeURIComponent(name)}/access-requests${status ? '?status=' + status : ''}`)); }
+  async decideAccessRequest(communityId, requestId, action, note = '') { return await this.request(`/communities/${communityId}/access-requests/${requestId}`, this.json('PATCH', { action, note })); }
+
+  async listFlairs(name) { return await this.request(`/communities/${encodeURIComponent(name)}/flairs`); }
+  async createFlair(communityId, flair) { return await this.request(`/communities/${communityId}/flairs`, this.json('POST', flair)); }
+  async updateFlair(communityId, flairId, flair) { return await this.request(`/communities/${communityId}/flairs/${flairId}`, this.json('PATCH', flair)); }
+  async deleteFlair(communityId, flairId) { return await this.request(`/communities/${communityId}/flairs/${flairId}`, { method: 'DELETE' }); }
+  async setPostFlair(postId, flairId) { return await this.request(`/posts/${postId}/flair`, this.json('PUT', { flair_id: flairId || '' })); }
+
+  async transferOwnership(communityId, newOwner, confirmName) { return await this.request(`/communities/${communityId}/transfer`, this.json('POST', { new_owner: newOwner, confirm_name: confirmName })); }
+
+  // ==========================================
+  // 16. Sanciones y apelaciones (01_11)
+  // ==========================================
+
+  async mySanctions() { return this.listFrom(await this.request('/users/me/sanctions')); }
+  async myAppeals() { return this.listFrom(await this.request('/users/me/appeals')); }
+  async createAppeal(kind, referenceId, message) { return await this.request('/appeals', this.json('POST', { kind, reference_id: referenceId, message })); }
+  async adminListAppeals(status = '') { return this.listFrom(await this.request(`/admin/appeals${status ? '?status=' + status : ''}`)); }
+  async adminDecideAppeal(id, decision, resolution) { return await this.request(`/admin/appeals/${id}`, this.json('PATCH', { decision, resolution })); }
 }
 
 // Exportar instancia singleton

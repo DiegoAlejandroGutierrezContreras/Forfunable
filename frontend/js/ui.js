@@ -51,6 +51,40 @@ window.UI = {
     return '';
   },
 
+  // 02_19 Flair de publicación: etiqueta con color de la paleta
+  flairChip(flair, attrs = '') {
+    if (!flair || !flair.name) return '';
+    const cls = { primary: 'chip-primary', secondary: 'chip-secondary', tertiary: 'chip-tertiary', warning: 'chip-warning', danger: 'chip-danger' }[flair.color] || 'chip-neutral';
+    return `<span class="${cls}" ${attrs} title="${this.esc(flair.description || flair.name)}">${this.icon('sell', 'text-[13px]')}${this.esc(flair.name)}</span>`;
+  },
+
+  // 02_16 Botón de guardar (marcador); usa la caché de ids guardados de api.savedIds()
+  isSaved(postId) { return !!(window.api._savedIds && window.api._savedIds.has(postId)); },
+
+  saveButton(postId, withLabel = false) {
+    const saved = this.isSaved(postId);
+    return `<button class="${withLabel ? 'btn-ghost btn-sm' : 'btn-icon'} ${saved ? 'text-primary' : ''}" data-save-btn="${this.esc(postId)}" data-label="${withLabel ? 1 : ''}" title="${saved ? 'Quitar de guardados' : 'Guardar'}" aria-pressed="${saved}" onclick="event.stopPropagation(); UI.toggleSave(${this.arg(postId)})">${this.icon(saved ? 'bookmark' : 'bookmark_border', `text-[18px] ${saved ? 'icon-fill' : ''}`)}${withLabel ? `<span>${saved ? 'Guardado' : 'Guardar'}</span>` : ''}</button>`;
+  },
+
+  saveButtonsRefresh(postId) {
+    document.querySelectorAll(`[data-save-btn="${CSS.escape(postId)}"]`).forEach(b => {
+      b.outerHTML = this.saveButton(postId, !!b.dataset.label);
+    });
+  },
+
+  async toggleSave(postId) {
+    if (!window.api.user) { window.utils.showToast('Inicia sesión para guardar publicaciones', 'info'); return Router.navigate('/login'); }
+    const wasSaved = this.isSaved(postId);
+    try {
+      if (wasSaved) await window.api.unsavePost(postId); else await window.api.savePost(postId);
+      this.saveButtonsRefresh(postId);
+      window.utils.showToast(wasSaved ? 'Quitado de guardados' : 'Guardado · Organízalo en /saved', 'info');
+      if (window.SavedView && SavedView.onToggle) SavedView.onToggle(postId, !wasSaved);
+    } catch (err) {
+      StatusView.toastError(err, 'No se pudo guardar');
+    }
+  },
+
   communityChip(name) {
     if (!name) return '';
     return `<a href="/c/${encodeURIComponent(name)}" data-link class="chip-community" onclick="event.stopPropagation()">c/${this.esc(name)}</a>`;
@@ -103,6 +137,7 @@ window.UI = {
           ${this.userLink(post.author_username)}
           <span class="text-ink-muted">·</span>
           <span class="text-ink-muted">${window.utils.formatTime(post.created_at)}</span>
+          ${post.flair ? this.flairChip(post.flair) : ''}
           ${post.content_type && post.content_type !== 'TEXT' ? `<span class="chip-neutral ml-auto">${{ IMAGE: 'Imagen', VIDEO: 'Video', LINK: 'Enlace' }[post.content_type] || ''}</span>` : ''}
         </div>
         <h3 class="mt-2 font-display text-headline-md text-balance">${this.esc(post.title)}</h3>
@@ -111,7 +146,10 @@ window.UI = {
         <div class="mt-4 flex items-center gap-2">
           ${this.vote('post', post.id, post.net_votes, post.user_vote)}
           <a href="${link}" data-link class="btn-ghost btn-sm" onclick="event.stopPropagation()">${this.icon('chat_bubble_outline', 'text-[18px]')} ${post.comments_count || 0} comentarios</a>
-          <button class="btn-icon ml-auto" title="Copiar enlace" onclick="event.stopPropagation(); UI.share(${this.arg(link)})">${this.icon('share', 'text-[18px]')}</button>
+          <span class="ml-auto flex items-center">
+            ${window.api.user ? this.saveButton(post.id) : ''}
+            <button class="btn-icon" title="Copiar enlace" onclick="event.stopPropagation(); UI.share(${this.arg(link)})">${this.icon('share', 'text-[18px]')}</button>
+          </span>
         </div>
       </article>`;
   },

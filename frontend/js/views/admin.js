@@ -10,6 +10,7 @@ window.AdminView = {
   tabs: [
     { id: 'metrics', label: 'Métricas', icon: 'monitoring' },
     { id: 'reports', label: 'Cola de reportes', icon: 'flag' },
+    { id: 'appeals', label: 'Apelaciones', icon: 'gavel' },
     { id: 'audit', label: 'Auditoría', icon: 'receipt_long' },
     { id: 'users', label: 'Usuarios y roles', icon: 'manage_accounts', admin: true },
     { id: 'sybil', label: 'Cuentas sospechosas', icon: 'policy', admin: true },
@@ -151,7 +152,7 @@ window.AdminView = {
 
   // 05_36 Registro de moderación y 05_44 Auditoría administrativa
   auditKinds: {
-    moderation: ['REMOVE_CONTENT', 'REMOVE_CONTENT_FORCE', 'RESOLVE_REPORT', 'BAN_USER', 'UNBAN_USER', 'ASSIGN_MODERATOR', 'UPDATE_COMMUNITY_SETTINGS'],
+    moderation: ['REMOVE_CONTENT', 'REMOVE_CONTENT_FORCE', 'RESOLVE_REPORT', 'BAN_USER', 'UNBAN_USER', 'ASSIGN_MODERATOR', 'UPDATE_COMMUNITY_SETTINGS', 'ACCESS_APPROVED', 'ACCESS_REJECTED', 'APPEAL_ACCEPTED', 'APPEAL_REJECTED', 'TRANSFER_OWNERSHIP'],
     admin: ['UPDATE_ROLE', 'SUSPEND_USER', 'ACTIVATE_USER', 'REINDEX_RANKING']
   },
 
@@ -159,7 +160,64 @@ window.AdminView = {
     REMOVE_CONTENT: ['delete', 'text-danger'], REMOVE_CONTENT_FORCE: ['gavel', 'text-danger'], RESOLVE_REPORT: ['task_alt', 'text-primary'],
     BAN_USER: ['block', 'text-danger'], UNBAN_USER: ['lock_open', 'text-primary'], ASSIGN_MODERATOR: ['shield_person', 'text-tertiary-soft'],
     UPDATE_COMMUNITY_SETTINGS: ['tune', 'text-secondary'], UPDATE_ROLE: ['manage_accounts', 'text-warning'], SUSPEND_USER: ['person_off', 'text-danger'],
-    ACTIVATE_USER: ['how_to_reg', 'text-primary'], REINDEX_RANKING: ['model_training', 'text-secondary']
+    ACTIVATE_USER: ['how_to_reg', 'text-primary'], REINDEX_RANKING: ['model_training', 'text-secondary'],
+    ACCESS_APPROVED: ['lock_open', 'text-primary'], ACCESS_REJECTED: ['lock', 'text-danger'],
+    APPEAL_ACCEPTED: ['gavel', 'text-primary'], APPEAL_REJECTED: ['gavel', 'text-danger'], TRANSFER_OWNERSHIP: ['swap_horiz', 'text-warning']
+  },
+
+  // 01_11 Cola de apelaciones: aceptar levanta la sanción o restaura la publicación
+  async appeals() {
+    const q = Object.fromEntries(new URLSearchParams(window.location.search));
+    this.appealFilter = q.status || this.appealFilter || 'PENDING';
+    let list;
+    try { list = await window.api.adminListAppeals(this.appealFilter === 'ALL' ? '' : this.appealFilter); } catch (err) {
+      if (err.error === 'FEATURE_UNAVAILABLE') { this.box().innerHTML = UI.empty({ icon: 'construction', title: 'Apelaciones no disponibles', text: 'Falta aplicar la migración V003 en el servidor.' }); return; }
+      throw err;
+    }
+    const kind = { COMMUNITY_BAN: ['block', 'Sanción en comunidad'], CONTENT_REMOVAL: ['delete', 'Retiro de contenido'] };
+    const chip = { PENDING: 'chip-warning', ACCEPTED: 'chip-primary', REJECTED: 'chip-danger' };
+    const label = { PENDING: 'Pendiente', ACCEPTED: 'Aceptada', REJECTED: 'Rechazada' };
+    this.box().innerHTML = `
+      <div class="mb-3">${UI.tabs([{ id: 'PENDING', label: 'Pendientes', icon: 'hourglass_top' }, { id: 'ACCEPTED', label: 'Aceptadas' }, { id: 'REJECTED', label: 'Rechazadas' }, { id: 'ALL', label: 'Todas' }], this.appealFilter, 'AdminView.setAppealFilter')}</div>
+      ${list.length ? `<div class="flex flex-col gap-3">${list.map(a => `
+        <article class="card">
+          <div class="flex flex-wrap items-center gap-2 text-body-sm">
+            <span class="flex items-center gap-1.5 text-label-lg">${UI.icon(kind[a.kind][0], 'text-[18px] text-danger')}${kind[a.kind][1]}</span>
+            ${a.community_name ? UI.communityChip(a.community_name) : ''}
+            <span class="${chip[a.status]}">${label[a.status]}</span>
+            <span class="ml-auto text-ink-muted">${UI.userLink(a.username)} · ${window.utils.formatTime(a.created_at)}</span>
+          </div>
+          <blockquote class="mt-3 border-l-2 border-line-strong pl-3 text-body-md text-ink-secondary">${UI.esc(a.message)}</blockquote>
+          <p class="mt-2 font-mono text-body-sm text-ink-muted">Referencia: ${UI.esc(a.reference_id)}</p>
+          ${a.status === 'PENDING' ? `
+            <div class="mt-4 border-t border-line pt-4">
+              <label class="label" for="res-${UI.esc(a.id)}">Resolución (la verá el usuario)</label>
+              <textarea id="res-${UI.esc(a.id)}" class="input" rows="2" placeholder="Explica la decisión con al menos 5 caracteres"></textarea>
+              <div class="field-hint" id="res-${UI.esc(a.id)}-hint"></div>
+              <div class="mt-3 flex flex-wrap justify-end gap-2">
+                <button class="btn-danger-ghost" onclick="AdminView.decideAppeal(${UI.arg(a.id)}, 'REJECT')">${UI.icon('close', 'text-[18px]')} Mantener sanción</button>
+                <button class="btn-primary" onclick="AdminView.decideAppeal(${UI.arg(a.id)}, 'ACCEPT')">${UI.icon('check', 'text-[18px]')} Aceptar y revertir</button>
+              </div>
+            </div>` : `
+            <div class="mt-3 rounded border border-line bg-surface-base p-3 text-body-sm"><span class="text-ink-muted">Resolución ${a.resolved_at ? window.utils.formatTime(a.resolved_at) : ''}:</span> ${UI.esc(a.resolution)}</div>`}
+        </article>`).join('')}</div>` : UI.empty({ icon: 'gavel', title: this.appealFilter === 'PENDING' ? 'No hay apelaciones pendientes' : 'Sin apelaciones', text: 'Cuando un usuario apele una sanción o un retiro de contenido aparecerá aquí.' })}`;
+  },
+
+  setAppealFilter(f) {
+    this.appealFilter = f;
+    window.history.replaceState(null, '', `/admin/appeals?status=${f}`);
+    this.appeals();
+  },
+
+  async decideAppeal(id, decision) {
+    const field = `res-${id}`;
+    const text = document.getElementById(field).value.trim();
+    if (!UI.setHint(field, text.length >= 5 ? '' : 'Escribe una resolución de al menos 5 caracteres.')) return;
+    try {
+      const res = await window.api.adminDecideAppeal(id, decision, text);
+      window.utils.showToast(decision === 'ACCEPT' ? (res.effect || 'Apelación aceptada') : 'Apelación rechazada', 'info');
+      this.appeals();
+    } catch (err) { StatusView.toastError(err, 'No se pudo resolver la apelación'); }
   },
 
   async audit() {

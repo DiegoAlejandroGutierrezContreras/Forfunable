@@ -13,6 +13,18 @@ window.CommunityView = {
     return !!u && ['COMMUNITY_MOD', 'GLOBAL_ADMIN'].includes(u.global_role);
   },
 
+  // Gestiona la comunidad: moderación global, fundador o moderador local
+  canManage(c) {
+    const u = window.api.user;
+    if (!u || !c) return false;
+    return this.isMod() || c.creator_id === u.id || (c.moderators || []).some(m => m.user_id === u.id);
+  },
+
+  isOwner(c) {
+    const u = window.api.user;
+    return !!u && !!c && (c.creator_id === u.id || u.global_role === 'GLOBAL_ADMIN');
+  },
+
   // Reglas: el texto se separa por líneas o por numeración "1." "2." …
   parseRules(text) {
     const clean = UI.plain(text || '').trim();
@@ -111,6 +123,15 @@ window.CommunityView = {
       return this.quarantine(c);
     }
 
+    // 06_79 / 06_80 Comunidad privada: quien no es miembro pide acceso
+    const manage = this.canManage(c);
+    const gated = c.is_private && !!me && !c.is_member && !manage;
+    let pending = null;
+    if (gated) {
+      try { pending = (await window.api.myAccessRequests()).find(r => r.community_id === c.id && r.status === 'PENDING') || null; } catch (_) {}
+    }
+    this.pendingRequest = pending;
+
     $main().innerHTML = `
       <section class="overflow-hidden rounded-lg border border-line bg-surface-card">
         <div class="h-24 bg-[radial-gradient(circle_at_20%_20%,rgba(0,230,118,0.18),transparent_55%),radial-gradient(circle_at_80%_0%,rgba(56,189,248,0.15),transparent_50%)]"></div>
@@ -125,14 +146,16 @@ window.CommunityView = {
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <button id="btn-subscribe" class="${c.is_member ? 'btn-secondary' : 'btn-primary'}" onclick="CommunityView.toggleJoin(${UI.arg(c.id)}, ${UI.arg(c.name)}, ${c.is_member})">${c.is_member ? `${UI.icon('check', 'text-[18px]')} Miembro` : `${UI.icon('group_add', 'text-[18px]')} Unirme`}</button>
-            ${this.isMod() ? `
+            ${gated
+              ? (pending
+                  ? `<a href="/requests" data-link id="btn-subscribe" class="btn-secondary">${UI.icon('hourglass_top', 'text-[18px]')} Solicitud enviada</a>`
+                  : `<button id="btn-subscribe" class="btn-primary" onclick="CommunityExtras.requestModal(${UI.arg(c.id)}, ${UI.arg(c.name)})">${UI.icon('lock_open', 'text-[18px]')} Solicitar acceso</button>`)
+              : `<button id="btn-subscribe" class="${c.is_member ? 'btn-secondary' : 'btn-primary'}" onclick="CommunityView.toggleJoin(${UI.arg(c.id)}, ${UI.arg(c.name)}, ${c.is_member})">${c.is_member ? `${UI.icon('check', 'text-[18px]')} Miembro` : `${UI.icon('group_add', 'text-[18px]')} Unirme`}</button>`}
+            ${manage ? `
               <div class="relative">
                 <button class="btn-secondary px-2.5" onclick="PostDetailView.toggleMenu('comm-menu')" aria-label="Gestionar">${UI.icon('more_horiz')}</button>
                 <div id="comm-menu" class="panel absolute right-0 top-full z-20 mt-1 hidden w-60 p-1.5">
-                  <a href="/c/${encodeURIComponent(c.name)}/settings" data-link class="nav-item">${UI.icon('tune', 'text-[19px]')}Ajustes y gobernanza</a>
-                  <a href="/c/${encodeURIComponent(c.name)}/moderators" data-link class="nav-item">${UI.icon('shield_person', 'text-[19px]')}Moderadores</a>
-                  <a href="/c/${encodeURIComponent(c.name)}/bans" data-link class="nav-item">${UI.icon('block', 'text-[19px]')}Sanciones</a>
+                  ${CommunityAdminView.links(c).map(([id, label, icon]) => `<a href="/c/${encodeURIComponent(c.name)}/${id}" data-link class="nav-item">${UI.icon(icon, 'text-[19px]')}${label}</a>`).join('')}
                 </div>
               </div>` : ''}
           </div>
@@ -141,19 +164,13 @@ window.CommunityView = {
       <p class="mt-4 text-body-lg text-ink-secondary">${UI.esc(c.description || 'Comunidad técnica de Forfunable.')}</p>
       <div id="community-banner"></div>
       <div class="mt-4 flex justify-end">
-        ${me ? `<a href="/submit?community=${encodeURIComponent(c.id)}" data-link class="btn-primary">${UI.icon('edit_square', 'text-[18px]')} Crear publicación en c/${UI.esc(c.name)}</a>` : ''}
+        ${me && !gated ? `<a href="/submit?community=${encodeURIComponent(c.id)}" data-link class="btn-primary">${UI.icon('edit_square', 'text-[18px]')} Crear publicación en c/${UI.esc(c.name)}</a>` : ''}
       </div>
       <div id="community-feed" class="mt-4"></div>`;
 
     // 06_76 Comunidad privada: solo miembros ven el contenido
-    if (c.is_private && !c.is_member && !this.isMod()) {
-      document.getElementById('community-feed').innerHTML = `
-        <div class="card flex flex-col items-center px-6 py-10 text-center">
-          <span class="flex h-12 w-12 items-center justify-center rounded-full bg-warning/10 text-warning">${UI.icon('lock')}</span>
-          <h3 class="mt-4 text-headline-sm">Comunidad restringida</h3>
-          <p class="mt-1 max-w-md text-body-md text-ink-secondary">Únete a c/${UI.esc(c.name)} para ver y participar en sus publicaciones.</p>
-          ${me ? '' : `<a href="/login" data-link class="btn-primary mt-5">Inicia sesión para unirte</a>`}
-        </div>`;
+    if (c.is_private && !c.is_member && !manage) {
+      document.getElementById('community-feed').innerHTML = CommunityExtras.gateCard(c, pending);
     } else {
       FeedView.renderCommunity(document.getElementById('community-feed'), c);
     }
@@ -247,6 +264,12 @@ window.CommunityView = {
       </div>
       <div class="mt-6"><a href="/c/${encodeURIComponent(c.name)}" data-link class="btn-secondary">${UI.icon('arrow_back', 'text-[18px]')} Volver a la comunidad</a></div>`;
     Router.setRail(this.aboutCard(c) + this.modsCard(c));
+  },
+
+  // Publicación o comentario de una comunidad privada sin acceso (403 PRIVATE_COMMUNITY)
+  privateGate(message, name) {
+    $main().innerHTML = `
+      <div class="mx-auto max-w-xl py-8">${CommunityExtras.gateCard({ name: name || '', is_private: true }, null, message)}</div>`;
   },
 
   // 06_78 Comunidad en cuarentena preventiva (+18)

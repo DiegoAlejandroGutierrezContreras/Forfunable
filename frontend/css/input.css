@@ -75,6 +75,10 @@
   .chip-danger { @apply chip bg-danger/10 text-danger; }
   .chip-warning { @apply chip bg-warning/10 text-warning; }
   .chip-neutral { @apply chip bg-surface-subtle text-ink-secondary; }
+  .chip-secondary { @apply chip bg-secondary/10 text-secondary; }
+  .diff-line { @apply whitespace-pre-wrap break-words px-3 py-0.5 font-mono text-body-sm; }
+  .diff-add { @apply bg-primary/10 text-primary; }
+  .diff-del { @apply bg-danger/10 text-danger line-through decoration-danger/40; }
 
   /* Votación (design.md › Voting Module) */
   .vote-pill { @apply inline-flex items-center gap-1 rounded border border-line bg-surface-card px-1.5 py-1; }

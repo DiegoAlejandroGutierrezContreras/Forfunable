@@ -17,6 +17,7 @@ window.PostDetailView = {
       post = await window.api.getPost(postId);
     } catch (err) {
       if (err.status === 404) return StatusView.page('404', { what: 'post' });
+      if (err.error === 'PRIVATE_COMMUNITY') return CommunityView.privateGate(err.message, (err.message.match(/c\/([\w-]+)/) || [])[1]);
       throw err;
     }
     this.post = post;
@@ -44,6 +45,7 @@ window.PostDetailView = {
             <div class="mt-0.5 flex flex-wrap items-center gap-2 text-body-sm">
               ${UI.userLink(post.author_username)}
               <span class="text-ink-muted">· ${window.utils.formatTime(post.created_at)}</span>
+              <a id="post-edited" href="${link}/history" data-link class="hidden text-ink-muted underline decoration-dotted hover:text-secondary"></a>
             </div>
           </div>
           <div class="relative">
@@ -51,15 +53,20 @@ window.PostDetailView = {
             <div id="post-menu" class="panel absolute right-0 top-full z-20 mt-1 hidden w-56 p-1.5">
               ${isAuthor ? `
                 <a href="${link}/edit" data-link class="nav-item">${UI.icon('edit', 'text-[19px]')}Editar publicación</a>
+                <button class="nav-item w-full" onclick="PostDetailView.flairModal()">${UI.icon('sell', 'text-[19px]')}Cambiar flair</button>
                 <button class="nav-item w-full text-danger hover:text-danger" onclick="PostDetailView.deletePost(${UI.arg(post.id)})">${UI.icon('delete', 'text-[19px]')}Eliminar</button>` : ''}
               ${me && !isAuthor ? `<button class="nav-item w-full" onclick="ModerationView.reportModal(${UI.arg(post.id)}, 'POST')">${UI.icon('flag', 'text-[19px]')}Reportar</button>` : ''}
               ${isMod && !isAuthor ? `<button class="nav-item w-full text-danger hover:text-danger" onclick="ModerationView.forceRemove(${UI.arg(post.id)}, 'POST')">${UI.icon('gavel', 'text-[19px]')}Retirar por moderación</button>` : ''}
+              ${isMod && !isAuthor ? `<button class="nav-item w-full" onclick="PostDetailView.flairModal()">${UI.icon('sell', 'text-[19px]')}Cambiar flair</button>` : ''}
+              <a href="${link}/history" data-link class="nav-item">${UI.icon('history', 'text-[19px]')}Historial de versiones</a>
+              ${me ? `<button class="nav-item w-full" onclick="SavedView.saveToModal(${UI.arg(post.id)})">${UI.icon('bookmark_add', 'text-[19px]')}Guardar en colección…</button>` : ''}
               <button class="nav-item w-full" onclick="UI.share(${UI.arg(link)})">${UI.icon('link', 'text-[19px]')}Copiar enlace</button>
             </div>
           </div>
         </header>
 
-        <h1 class="mt-5 text-headline-lg text-balance">${UI.esc(post.title)}</h1>
+        ${post.flair ? `<div class="mt-5">${UI.flairChip(post.flair)}</div>` : ''}
+        <h1 class="${post.flair ? 'mt-2' : 'mt-5'} text-headline-lg text-balance">${UI.esc(post.title)}</h1>
         ${UI.mediaBlock(post)}
         ${post.body_text ? `<div class="prose-post mt-4 text-body-lg">${window.utils.renderMarkdown(post.body_text)}</div>` : ''}
 
@@ -69,6 +76,7 @@ window.PostDetailView = {
           ${UI.vote('post', post.id, post.net_votes, post.user_vote)}
           <a href="#comments" class="btn-ghost btn-sm" onclick="event.preventDefault(); document.getElementById('comments').scrollIntoView({ behavior: 'smooth' })">${UI.icon('chat_bubble_outline', 'text-[18px]')} <span id="comments-count">${post.comments_count || 0}</span> comentarios</a>
           <button class="btn-ghost btn-sm" onclick="UI.share(${UI.arg(link)})">${UI.icon('share', 'text-[18px]')} Compartir</button>
+          ${me ? UI.saveButton(post.id, true) : ''}
           ${me ? `<button class="btn-ghost btn-sm" onclick="ModerationView.proposeNote(${UI.arg(post.id)})">${UI.icon('fact_check', 'text-[18px]')} Proponer nota</button>` : ''}
         </footer>
       </article>
@@ -103,6 +111,48 @@ window.PostDetailView = {
     this.loadComments();
     if (window.ModerationView && ModerationView.notesBlock) ModerationView.notesBlock(post);
     this.renderCommunityRail(post.community_name);
+    this.loadEdited(post.id);
+  },
+
+  // 03_22 Indicador "editado": enlaza al historial si hay versiones anteriores
+  async loadEdited(postId) {
+    try {
+      const h = await window.api.listRevisions(postId);
+      const el = document.getElementById('post-edited');
+      if (el && h.edits > 0) {
+        el.textContent = `· editado ${h.edits === 1 ? '1 vez' : h.edits + ' veces'}`;
+        el.classList.remove('hidden');
+      }
+    } catch (_) {}
+  },
+
+  // 02_19 Asignar o quitar el flair de la publicación (autor o moderación)
+  async flairModal() {
+    const post = this.post;
+    let data;
+    try { data = await window.api.listFlairs(post.community_name); } catch (err) { return StatusView.toastError(err, 'No se pudieron cargar los flairs'); }
+    const flairs = (data.items || []).filter(f => !f.mod_only || data.can_manage);
+    if (!flairs.length) return window.utils.showToast(`c/${post.community_name} aún no tiene flairs`, 'info');
+    const current = post.flair && post.flair.id;
+    UI.modal({
+      title: 'Flair de la publicación', icon: 'sell', tone: 'secondary',
+      body: `<p class="mb-3">Ayuda a filtrar el contenido de c/${UI.esc(post.community_name)}.</p>
+        <div class="flex flex-wrap gap-2">
+          <button class="chip-neutral cursor-pointer py-1 ${!current ? 'ring-1 ring-primary' : ''}" onclick="PostDetailView.setFlair('')">Sin flair</button>
+          ${flairs.map(f => `<button class="cursor-pointer rounded-chip ${f.id === current ? 'ring-1 ring-primary' : ''}" onclick="PostDetailView.setFlair(${UI.arg(f.id)})">${UI.flairChip(f)}</button>`).join('')}
+        </div>`
+    });
+  },
+
+  async setFlair(flairId) {
+    try {
+      await window.api.setPostFlair(this.post.id, flairId);
+      UI.closeModal();
+      window.utils.showToast(flairId ? 'Flair asignado' : 'Flair retirado', 'info');
+      this.render(this.post.id);
+    } catch (err) {
+      StatusView.toastError(err, 'No se pudo cambiar el flair');
+    }
   },
 
   toggleMenu(id) {

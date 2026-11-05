@@ -261,7 +261,8 @@ window.ModerationView = {
     const n = notifs.find(x => x.id === id);
     if (!n) return StatusView.page('404', { what: 'notice', title: 'Aviso no encontrado' });
     if (!n.is_read) { try { await window.api.markNotificationRead(id); Router.refreshBadges(); } catch (_) {} }
-    const removal = /retirad/i.test(n.title + n.message);
+    const removal = /retirad/i.test(n.title + n.message) || (n.type || '').startsWith('removed:');
+    const appealable = removal || /sanci[oó]n|sancionad|bane/i.test(n.title + n.message);
     const target = NotificationsView.linkFor(n.type);
     $main().innerHTML = `
       <div class="mx-auto max-w-2xl">
@@ -282,6 +283,7 @@ window.ModerationView = {
         </div>
         <div class="mt-6 flex flex-wrap justify-center gap-3">
           ${target && target !== '/profile' ? `<a href="${target}" data-link class="btn-secondary">Ver el contexto</a>` : ''}
+          ${appealable ? `<a href="/appeals" data-link class="btn-secondary">${UI.icon('gavel', 'text-[18px]')} Apelar esta decisión</a>` : ''}
           <a href="/notifications" data-link class="btn-primary">${UI.icon('arrow_back', 'text-[18px]')} Volver a notificaciones</a>
         </div>
       </div>`;

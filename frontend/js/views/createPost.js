@@ -113,6 +113,10 @@ window.CreatePostView = {
             <div id="dest-desc" class="truncate text-body-sm text-ink-secondary">La publicación aparecerá en esa comunidad y en el feed.</div>
           </div>
           <select id="post-community" class="input w-auto min-w-[200px]" onchange="CreatePostView.updateDestination(); CreatePostView.saveDraft()"><option>Cargando…</option></select>
+          <div id="flair-picker" class="hidden w-full border-t border-line pt-3">
+            <div class="mb-2 flex items-center gap-2 text-label-sm uppercase tracking-wider text-ink-muted">${UI.icon('sell', 'text-[15px]')} Flair (opcional)</div>
+            <div id="flair-options" class="flex flex-wrap gap-2"></div>
+          </div>
         </div>
 
         <div class="mb-4 grid grid-cols-2 gap-1 rounded-lg border border-line bg-surface-card p-1.5 sm:grid-cols-4">
@@ -171,7 +175,33 @@ window.CreatePostView = {
     const c = (this.comms || []).find(x => x.id === id);
     document.getElementById('dest-name').textContent = c ? `c/${UI.plain(c.name)}` : 'Elige el destino';
     document.getElementById('dest-desc').textContent = c ? UI.plain(c.description || 'Comunidad de Forfunable') : 'La publicación aparecerá en esa comunidad y en el feed.';
+    this.loadFlairs(c);
   },
+
+  // 02_19 Flairs de la comunidad de destino (los "solo moderación" solo los ve la moderación)
+  async loadFlairs(c) {
+    const box = document.getElementById('flair-picker');
+    if (!box || this.editing) return;
+    this.flairId = '';
+    if (!c) { box.classList.add('hidden'); return; }
+    let flairs = [];
+    try {
+      const data = await window.api.listFlairs(c.name);
+      flairs = (data.items || []).filter(f => !f.mod_only || data.can_manage);
+    } catch (_) {}
+    box.classList.toggle('hidden', !flairs.length);
+    this.flairs = flairs;
+    this.paintFlairs();
+  },
+
+  paintFlairs() {
+    const opts = document.getElementById('flair-options');
+    if (!opts) return;
+    opts.innerHTML = `<button type="button" class="chip-neutral cursor-pointer py-1 ${!this.flairId ? 'ring-1 ring-primary' : ''}" onclick="CreatePostView.pickFlair('')">Sin flair</button>` +
+      (this.flairs || []).map(f => `<button type="button" class="cursor-pointer rounded-chip ${this.flairId === f.id ? 'ring-1 ring-primary' : 'opacity-75 hover:opacity-100'}" aria-pressed="${this.flairId === f.id}" onclick="CreatePostView.pickFlair(${UI.arg(f.id)})">${UI.flairChip(f)}</button>`).join('');
+  },
+
+  pickFlair(id) { this.flairId = id; this.paintFlairs(); },
 
   setType(type, silent = false) {
     this.type = type;
@@ -311,7 +341,8 @@ window.CreatePostView = {
         title: d.title,
         content_type: this.type,
         body_text: d.body,
-        media_url: this.type === 'TEXT' ? '' : d.media
+        media_url: this.type === 'TEXT' ? '' : d.media,
+        flair_id: this.flairId || ''
       });
       this.clearDraft();
       Router.leaveGuard = null;

@@ -16,12 +16,21 @@ window.CommunityAdminView = {
     }
   },
 
+  // Pestañas visibles: las de moderación global y las del fundador o moderador local
+  links(c) {
+    const tabs = [];
+    if (CommunityView.isMod()) {
+      tabs.push(['settings', 'Ajustes y gobernanza', 'tune'], ['moderators', 'Moderadores', 'shield_person'], ['bans', 'Sanciones', 'block']);
+    }
+    if (CommunityView.canManage(c)) {
+      tabs.push(['flairs', 'Flairs', 'sell'], ['requests', 'Solicitudes de acceso', 'lock_open']);
+    }
+    if (CommunityView.isOwner(c)) tabs.push(['ownership', 'Transferir propiedad', 'swap_horiz']);
+    return tabs;
+  },
+
   header(c, active) {
-    const tabs = [
-      ['settings', 'Ajustes y gobernanza', 'tune'],
-      ['moderators', 'Moderadores', 'shield_person'],
-      ['bans', 'Sanciones', 'block']
-    ];
+    const tabs = this.links(c);
     return `
       <nav class="mb-3 flex items-center gap-1.5 text-body-sm text-ink-muted">
         <a href="/c/${encodeURIComponent(c.name)}" data-link class="text-secondary hover:underline">c/${UI.esc(c.name)}</a>${UI.icon('chevron_right', 'text-[16px]')}<span>Gestión</span>
