@@ -605,6 +605,11 @@ class ApiClient {
     return await this.request(`/admin/users/${userId}/status`, this.jsonv('PATCH', 'userStatus', { is_active: isActive, freeze_reason: freezeReason }));
   }
 
+  // Solo GLOBAL_ADMIN: anonimiza la cuenta de inmediato (su contenido queda como «usuario eliminado»)
+  async adminDeleteUser(userId, reason, confirmUsername) {
+    return await this.request(`/admin/users/${userId}`, this.jsonv('DELETE', 'adminDeleteUser', { reason, confirm_username: confirmUsername }));
+  }
+
   async adminListAllReports(status = '') {
     return this.listFrom(await this.request(`/admin/moderation/reports${status ? '?status=' + status : ''}`));
   }

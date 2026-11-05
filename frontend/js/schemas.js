@@ -118,6 +118,7 @@
     unban: z.object({ user_id: id, community_id: id, reason: optionalText(500) }).strict(),
     assignModerator: z.object({ user_id: id, role: z.enum(['OWNER', 'LEAD_MOD', 'MOD']) }).strict(),
     userRole: z.object({ global_role: z.enum(['USER', 'COMMUNITY_MOD', 'GLOBAL_ADMIN']) }).strict(),
+    adminDeleteUser: z.object({ reason: text(5, 500, 'el motivo'), confirm_username: z.string().trim().min(1, 'Escribe el nombre de usuario para confirmar.') }).strict(),
     userStatus: z.object({ is_active: z.boolean(), freeze_reason: optionalText(500) }).strict(),
     resolveReport: z.object({ status: z.enum(['PENDING', 'UNDER_REVIEW', 'ACTIONED', 'DISMISSED']) }).strict()
   };

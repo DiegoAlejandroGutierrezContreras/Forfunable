@@ -485,31 +485,62 @@ func (e *ExtendedRepository) PurgeDueDeletions() (int, error) {
 	rows.Close()
 	purged := 0
 	for _, id := range ids {
-		buf := make([]byte, 16)
-		_, _ = rand.Read(buf)
-		tag := hex.EncodeToString(buf[:4])
-		tx, err := e.db.BeginTx(ctx, nil)
-		if err != nil {
+		if err := e.anonymizeUser(ctx, id, "Cuenta eliminada por su titular"); err != nil {
+			log.Printf("[WARN] No se pudo anonimizar la cuenta %s: %v", id, err)
 			continue
 		}
-		_, err1 := tx.ExecContext(ctx,
-			`UPDATE users SET username = $2, email = $3, password_hash = $4, avatar_url = NULL, bio = NULL,
-			   is_active = FALSE, freeze_reason = 'Cuenta eliminada por su titular' WHERE id = $1`,
-			id, "eliminado_"+tag, id+"@eliminado.invalid", "!"+hex.EncodeToString(buf))
-		_, err2 := tx.ExecContext(ctx, `DELETE FROM saved_posts WHERE user_id = $1`, id)
-		_, err3 := tx.ExecContext(ctx, `DELETE FROM saved_collections WHERE user_id = $1`, id)
-		_, err4 := tx.ExecContext(ctx, `UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, id)
-		_, err5 := tx.ExecContext(ctx, `UPDATE account_deletions SET purged_at = NOW() WHERE user_id = $1`, id)
-		if err1 != nil || err2 != nil || err3 != nil || err4 != nil || err5 != nil {
-			_ = tx.Rollback()
-			log.Printf("[WARN] No se pudo anonimizar la cuenta %s: %v %v %v %v %v", id, err1, err2, err3, err4, err5)
-			continue
-		}
-		if tx.Commit() == nil {
-			purged++
-		}
+		purged++
 	}
 	return purged, nil
+}
+
+// anonymizeUser borra los datos personales de una cuenta y la desactiva para siempre.
+// Las publicaciones y comentarios se conservan como de «usuario eliminado».
+func (e *ExtendedRepository) anonymizeUser(ctx context.Context, id, reason string) error {
+	buf := make([]byte, 16)
+	_, _ = rand.Read(buf)
+	tag := hex.EncodeToString(buf[:4])
+	tx, err := e.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	steps := []struct {
+		q    string
+		args []interface{}
+	}{
+		{`UPDATE users SET username = $2, email = $3, password_hash = $4, avatar_url = NULL, bio = NULL,
+		   is_active = FALSE, freeze_reason = $5 WHERE id = $1`,
+			[]interface{}{id, "eliminado_" + tag, id + "@eliminado.invalid", "!" + hex.EncodeToString(buf), reason}},
+		{`DELETE FROM saved_posts WHERE user_id = $1`, []interface{}{id}},
+		{`DELETE FROM saved_collections WHERE user_id = $1`, []interface{}{id}},
+		{`UPDATE user_sessions SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`, []interface{}{id}},
+		{`INSERT INTO account_deletions (user_id, reason, requested_at, purge_after, purged_at)
+		  VALUES ($1, $2, NOW(), NOW(), NOW())
+		  ON CONFLICT (user_id) DO UPDATE SET purged_at = NOW()`, []interface{}{id, reason}},
+	}
+	for _, st := range steps {
+		if _, err := tx.ExecContext(ctx, st.q, st.args...); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	e.mu.Lock()
+	e.sessionCache = map[string]sessionCacheEntry{} // las sesiones revocadas dejan de valer al instante
+	e.mu.Unlock()
+	return nil
+}
+
+// AdminDeleteUser anonimiza de inmediato una cuenta (acción de un administrador global).
+func (e *ExtendedRepository) AdminDeleteUser(id, reason string) error {
+	if err := e.guard(); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return e.anonymizeUser(ctx, id, reason)
 }
 
 // --- Acceso a comunidades privadas ---

@@ -153,7 +153,7 @@ window.AdminView = {
   // 05_36 Registro de moderación y 05_44 Auditoría administrativa
   auditKinds: {
     moderation: ['REMOVE_CONTENT', 'REMOVE_CONTENT_FORCE', 'RESOLVE_REPORT', 'BAN_USER', 'UNBAN_USER', 'ASSIGN_MODERATOR', 'UPDATE_COMMUNITY_SETTINGS', 'ACCESS_APPROVED', 'ACCESS_REJECTED', 'APPEAL_ACCEPTED', 'APPEAL_REJECTED', 'TRANSFER_OWNERSHIP'],
-    admin: ['UPDATE_ROLE', 'SUSPEND_USER', 'ACTIVATE_USER', 'REINDEX_RANKING']
+    admin: ['UPDATE_ROLE', 'SUSPEND_USER', 'ACTIVATE_USER', 'DELETE_USER', 'REINDEX_RANKING']
   },
 
   actionStyle: {
@@ -162,7 +162,8 @@ window.AdminView = {
     UPDATE_COMMUNITY_SETTINGS: ['tune', 'text-secondary'], UPDATE_ROLE: ['manage_accounts', 'text-warning'], SUSPEND_USER: ['person_off', 'text-danger'],
     ACTIVATE_USER: ['how_to_reg', 'text-primary'], REINDEX_RANKING: ['model_training', 'text-secondary'],
     ACCESS_APPROVED: ['lock_open', 'text-primary'], ACCESS_REJECTED: ['lock', 'text-danger'],
-    APPEAL_ACCEPTED: ['gavel', 'text-primary'], APPEAL_REJECTED: ['gavel', 'text-danger'], TRANSFER_OWNERSHIP: ['swap_horiz', 'text-warning']
+    APPEAL_ACCEPTED: ['gavel', 'text-primary'], APPEAL_REJECTED: ['gavel', 'text-danger'], TRANSFER_OWNERSHIP: ['swap_horiz', 'text-warning'],
+    DELETE_USER: ['person_remove', 'text-danger']
   },
 
   // 01_11 Cola de apelaciones: aceptar levanta la sanción o restaura la publicación
@@ -300,19 +301,28 @@ window.AdminView = {
     document.getElementById('users-table').innerHTML = users.length ? `
       <div class="card overflow-x-auto p-0"><table class="table">
         <thead><tr><th>Usuario</th><th>Karma</th><th>Rol global</th><th>Estado</th><th></th></tr></thead>
-        <tbody>${users.map(u => `
-          <tr class="${u.is_active ? '' : 'bg-danger/5'}">
-            <td><a href="/u/${encodeURIComponent(u.username)}" data-link class="flex items-center gap-2 hover:text-secondary">${UI.avatar(u, 30)}<span><span class="block text-label-lg">@${UI.esc(u.username)}</span><span class="block text-body-sm text-ink-muted">${UI.esc(u.email)}</span></span></a></td>
+        <tbody>${users.map(u => {
+          const deleted = /@eliminado\.invalid$/.test(u.email || '');
+          const self = u.id === me.id;
+          const canDelete = !self && !deleted && u.global_role !== 'GLOBAL_ADMIN';
+          return `
+          <tr class="${deleted ? 'opacity-60' : u.is_active ? '' : 'bg-danger/5'}">
+            <td>${deleted
+              ? `<span class="flex items-center gap-2">${UI.avatar(u, 30)}<span><span class="block text-label-lg text-ink-muted">@${UI.esc(u.username)}</span><span class="block text-body-sm text-ink-muted">Datos personales borrados</span></span></span>`
+              : `<a href="/u/${encodeURIComponent(u.username)}" data-link class="flex items-center gap-2 hover:text-secondary">${UI.avatar(u, 30)}<span><span class="block text-label-lg">@${UI.esc(u.username)}</span><span class="block text-body-sm text-ink-muted">${UI.esc(u.email)}</span></span></a>`}</td>
             <td class="font-mono text-primary">${u.karma_score}</td>
-            <td>${u.id === me.id ? `<span class="chip-danger">${u.global_role}</span>` : `
+            <td>${self || deleted ? `<span class="${self ? 'chip-danger' : 'chip-neutral'}">${u.global_role}</span>` : `
               <select class="input w-auto py-1 text-body-sm" ${UI.on('change', 'AdminView.changeRole', u.id, u.username, UI.EL)} data-prev="${u.global_role}">
                 ${['USER', 'COMMUNITY_MOD', 'GLOBAL_ADMIN'].map(r => `<option value="${r}" ${u.global_role === r ? 'selected' : ''}>${r}</option>`).join('')}
               </select>`}</td>
-            <td>${u.is_active ? '<span class="chip-primary">Activa</span>' : '<span class="chip-danger">Suspendida</span>'}</td>
-            <td class="text-right">${u.id === me.id ? '' : u.is_active
+            <td>${deleted ? `<span class="chip-neutral">${UI.icon('person_remove', 'text-[13px]')} Eliminada</span>` : u.is_active ? '<span class="chip-primary">Activa</span>' : '<span class="chip-danger">Suspendida</span>'}</td>
+            <td class="text-right"><span class="inline-flex items-center justify-end gap-1">${self || deleted ? '' : u.is_active
               ? `<button class="btn-danger-ghost btn-sm" ${UI.on('click', 'AdminView.suspend', u.id, u.username)}>${UI.icon('person_off', 'text-[16px]')} Suspender</button>`
-              : `<button class="btn-secondary btn-sm" ${UI.on('click', 'AdminView.reactivate', u.id, u.username)}>${UI.icon('how_to_reg', 'text-[16px]')} Reactivar</button>`}</td>
-          </tr>`).join('')}</tbody></table></div>` : UI.empty({ icon: 'person_search', title: 'Sin coincidencias' });
+              : `<button class="btn-secondary btn-sm" ${UI.on('click', 'AdminView.reactivate', u.id, u.username)}>${UI.icon('how_to_reg', 'text-[16px]')} Reactivar</button>`}
+              ${canDelete ? `<button class="btn-icon text-danger hover:bg-danger/10 hover:text-danger" title="Eliminar cuenta" aria-label="Eliminar la cuenta de @${UI.esc(u.username)}" ${UI.on('click', 'AdminView.deleteUser', u.id, u.username)}>${UI.icon('delete_forever', 'text-[19px]')}</button>` : ''}
+              ${!self && !deleted && u.global_role === 'GLOBAL_ADMIN' ? `<span class="btn-icon cursor-help text-ink-muted" title="Para eliminar a un administrador global, cámbiale antes el rol">${UI.icon('shield', 'text-[18px]')}</span>` : ''}</span></td>
+          `;
+        }).join('')}</tbody></table></div>` : UI.empty({ icon: 'person_search', title: 'Sin coincidencias' });
   },
 
   async changeRole(id, username, select) {
@@ -350,6 +360,50 @@ window.AdminView = {
     } catch (err) {
       btn.disabled = false;
       StatusView.toastError(err, 'No se pudo suspender');
+    }
+  },
+
+  // Eliminar cuenta (solo GLOBAL_ADMIN): doble confirmación con motivo y nombre de usuario
+  deleteUser(id, username) {
+    UI.modal({
+      title: `Eliminar la cuenta de @${username}`, icon: 'delete_forever', tone: 'danger',
+      body: `
+        <ul class="mb-4 flex flex-col gap-1.5 text-body-sm">
+          <li class="flex gap-2">${UI.icon('person_off', 'text-[17px] text-danger')}Se borran su correo, foto, biografía y contraseña; nadie podrá volver a entrar con ella.</li>
+          <li class="flex gap-2">${UI.icon('logout', 'text-[17px] text-warning')}Se cierran todas sus sesiones al instante.</li>
+          <li class="flex gap-2">${UI.icon('article', 'text-[17px] text-ink-muted')}Sus publicaciones y comentarios se conservan como de «usuario eliminado».</li>
+          <li class="flex gap-2">${UI.icon('receipt_long', 'text-[17px] text-ink-muted')}<span>Queda registrado en la auditoría administrativa. <strong class="text-ink">No se puede deshacer.</strong></span></li>
+        </ul>
+        <div class="text-left">
+          ${UI.field('del-user-reason', 'Motivo', { textarea: true, rows: 2, placeholder: 'Ej: Cuenta de spam confirmada tras varias denuncias' })}
+          ${UI.field('del-user-confirm', `Escribe <span class="font-mono text-ink">${UI.esc(username)}</span> para confirmar`, { attrs: `autocomplete="off" ${UI.on('input', 'AdminView.deleteReady', username)}` })}
+        </div>`,
+      actions: `<button class="btn-ghost" ${UI.on('click', 'UI.closeModal')}>Cancelar</button>
+        <button class="btn-danger" id="btn-del-user" disabled ${UI.on('click', 'AdminView.confirmDeleteUser', UI.EL, id, username)}>${UI.icon('delete_forever', 'text-[18px]')} Eliminar cuenta</button>`
+    });
+    document.getElementById('del-user-reason').focus();
+  },
+
+  deleteReady(username) {
+    const ok = document.getElementById('del-user-confirm').value.trim().toLowerCase() === String(username).toLowerCase();
+    document.getElementById('btn-del-user').disabled = !ok;
+    return ok;
+  },
+
+  async confirmDeleteUser(btn, id, username) {
+    const reason = document.getElementById('del-user-reason').value.trim();
+    if (!UI.setHint('del-user-reason', reason.length < 5 ? 'Explica el motivo (mínimo 5 caracteres).' : '')) return;
+    if (!this.deleteReady(username)) return;
+    btn.disabled = true;
+    try {
+      const res = await window.api.adminDeleteUser(id, reason, document.getElementById('del-user-confirm').value.trim());
+      document.getElementById('ui-modal')?.remove();
+      window.utils.showToast(res.message || `La cuenta de @${username} fue eliminada`, 'info');
+      this.loadUsers();
+    } catch (err) {
+      btn.disabled = false;
+      if (err.status === 400) return UI.setHint(/confirmación|usuario/i.test(err.message) ? 'del-user-confirm' : 'del-user-reason', err.message);
+      StatusView.toastError(err, 'No se pudo eliminar la cuenta');
     }
   },
 

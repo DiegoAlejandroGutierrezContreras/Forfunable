@@ -333,6 +333,7 @@ func main() {
 			admin.GET("/audit/logs", adminHandler.ListAuditLogs)
 			admin.GET("/appeals", extHandler.AdminListAppeals)
 			admin.PATCH("/appeals/:id", extHandler.AdminDecideAppeal)
+			admin.DELETE("/users/:id", extHandler.AdminDeleteUser)
 			admin.GET("/analytics/metrics", adminHandler.GetAnalyticsMetrics)
 			admin.POST("/recommendations/reindex", adminHandler.ReindexRecommendations)
 

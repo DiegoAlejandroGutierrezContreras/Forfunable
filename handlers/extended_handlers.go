@@ -612,3 +612,53 @@ func (h *ExtendedHandler) TransferOwnership(c *gin.Context) {
 	notify(h.repo, comm.CreatorID, callerID, "Propiedad transferida", fmt.Sprintf("c/%s ahora pertenece a @%s; quedaste como moderador principal.", comm.Name, newOwner.Username), notifCommunity(comm.Name))
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Propiedad transferida a @" + newOwner.Username, "new_owner": newOwner.Username})
 }
+
+// AdminDeleteUser maneja DELETE /api/v1/admin/users/:id (200 OK). Solo GLOBAL_ADMIN.
+// Anonimiza la cuenta al instante (datos personales, sesiones, guardados); su contenido queda
+// como de «usuario eliminado». No se puede eliminar la propia cuenta ni a otro administrador global.
+func (h *ExtendedHandler) AdminDeleteUser(c *gin.Context) {
+	if c.GetString("global_role") != models.RoleGlobalAdmin {
+		extError(c, errors.New("solo un administrador global puede eliminar cuentas"), http.StatusForbidden)
+		return
+	}
+	targetID := c.Param("id")
+	if targetID == c.GetString("user_id") {
+		extError(c, errors.New("no puedes eliminar tu propia cuenta desde la consola; usa Ajustes > Eliminar cuenta"), http.StatusBadRequest)
+		return
+	}
+	var req struct {
+		Reason          string `json:"reason"`
+		ConfirmUsername string `json:"confirm_username"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(strings.TrimSpace(req.Reason)) < 5 {
+		extError(c, errors.New("explica el motivo de la eliminación (mínimo 5 caracteres)"), http.StatusBadRequest)
+		return
+	}
+	user, err := h.repo.GetUserByID(targetID)
+	if err != nil {
+		extError(c, errors.New("usuario no encontrado"), http.StatusNotFound)
+		return
+	}
+	if strings.HasSuffix(user.Email, "@eliminado.invalid") {
+		extError(c, errors.New("la cuenta ya fue eliminada"), http.StatusConflict)
+		return
+	}
+	if user.GlobalRole == models.RoleGlobalAdmin {
+		extError(c, errors.New("no se puede eliminar a un administrador global: cámbiale primero el rol"), http.StatusForbidden)
+		return
+	}
+	if !strings.EqualFold(strings.TrimSpace(req.ConfirmUsername), user.Username) {
+		extError(c, errors.New("el nombre de usuario de confirmación no coincide"), http.StatusBadRequest)
+		return
+	}
+	reason := middleware.SanitizeText(req.Reason)
+	if err := h.ext.AdminDeleteUser(user.ID, "Cuenta eliminada por la administración: "+reason); err != nil {
+		extError(c, err, http.StatusInternalServerError)
+		return
+	}
+	_ = h.repo.CreateModerationLog(&models.ModerationLog{
+		ModeratorID: c.GetString("user_id"), ActionType: "DELETE_USER", TargetID: user.ID,
+		Reason: fmt.Sprintf("Cuenta @%s eliminada: %s", user.Username, reason),
+	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "La cuenta de @" + user.Username + " fue eliminada"})
+}
